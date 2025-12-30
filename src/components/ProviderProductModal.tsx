@@ -11,7 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Package, DollarSign, Info, Image as ImageIcon, Tag, Scale, Ruler } from 'lucide-react';
 import { ProviderProduct } from '@/hooks/useProvider';
-import { ProductImageUpload } from './ProductImageUpload';
+import { ProductMultipleImagesUpload } from './ProductMultipleImagesUpload';
+import { getPricingConfig, hasSizePricing, type PricingSystem } from '@/config/productPricing';
 
 interface ProviderProductModalProps {
   isOpen: boolean;
@@ -47,12 +48,23 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
     product_category: '',
     description: '',
     detailed_description: '',
-    price: '',
+    price: '', // Precio general (para retrocompatibilidad)
+    price_small: '', // Precio para perros pequeños
+    price_medium: '', // Precio para perros medianos
+    price_large: '', // Precio para perros grandes
+    price_extra_large: '', // Precio para perros extra grandes
+    price_xs: '', // Precio talla XS (ropa)
+    price_s: '', // Precio talla S (ropa)
+    price_m: '', // Precio talla M (ropa)
+    price_l: '', // Precio talla L (ropa)
+    price_xl: '', // Precio talla XL (ropa)
+    price_xxl: '', // Precio talla XXL (ropa)
     currency: 'GTQ',
     stock_quantity: '',
     min_stock_alert: '5',
     is_active: true,
     product_image_url: '',
+    secondary_images: [] as string[],
     brand: '',
     weight_kg: '',
     dimensions_cm: '',
@@ -69,12 +81,23 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
         product_category: product.product_category,
         description: product.description || '',
         detailed_description: product.detailed_description || '',
-        price: product.price.toString(),
+        price: product.price?.toString() || '',
+        price_small: (product as any).price_small?.toString() || '',
+        price_medium: (product as any).price_medium?.toString() || '',
+        price_large: (product as any).price_large?.toString() || '',
+        price_extra_large: (product as any).price_extra_large?.toString() || '',
+        price_xs: (product as any).price_xs?.toString() || '',
+        price_s: (product as any).price_s?.toString() || '',
+        price_m: (product as any).price_m?.toString() || '',
+        price_l: (product as any).price_l?.toString() || '',
+        price_xl: (product as any).price_xl?.toString() || '',
+        price_xxl: (product as any).price_xxl?.toString() || '',
         currency: product.currency || 'GTQ',
         stock_quantity: product.stock_quantity.toString(),
         min_stock_alert: product.min_stock_alert?.toString() || '5',
         is_active: product.is_active,
         product_image_url: product.product_image_url || '',
+        secondary_images: (product as any).secondary_images || [],
         brand: product.brand || '',
         weight_kg: product.weight_kg?.toString() || '',
         dimensions_cm: product.dimensions_cm || '',
@@ -87,11 +110,22 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
         description: '',
         detailed_description: '',
         price: '',
+        price_small: '',
+        price_medium: '',
+        price_large: '',
+        price_extra_large: '',
+        price_xs: '',
+        price_s: '',
+        price_m: '',
+        price_l: '',
+        price_xl: '',
+        price_xxl: '',
         currency: 'GTQ',
         stock_quantity: '',
         min_stock_alert: '5',
         is_active: true,
         product_image_url: '',
+        secondary_images: [],
         brand: '',
         weight_kg: '',
         dimensions_cm: '',
@@ -114,8 +148,33 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
       if (!formData.product_category) {
         throw new Error('La categoría del producto es obligatoria');
       }
-      if (!formData.price || parseFloat(formData.price) <= 0) {
-        throw new Error('El precio debe ser mayor a 0');
+      // Validar que al menos un precio esté definido
+      // Verificar precios por tamaño independientemente de la configuración de categoría
+      // Esto permite flexibilidad para productos que tienen precios por tamaño aunque su categoría esté configurada como "single"
+      const hasGeneralPrice = formData.price && parseFloat(formData.price) > 0;
+      
+      // Verificar precios por tamaño de perro
+      const hasDogSizePrices = !!(
+        (formData.price_small && parseFloat(formData.price_small) > 0) ||
+        (formData.price_medium && parseFloat(formData.price_medium) > 0) ||
+        (formData.price_large && parseFloat(formData.price_large) > 0) ||
+        (formData.price_extra_large && parseFloat(formData.price_extra_large) > 0)
+      );
+      
+      // Verificar precios por talla de ropa
+      const hasClothingSizePrices = !!(
+        (formData.price_xs && parseFloat(formData.price_xs) > 0) ||
+        (formData.price_s && parseFloat(formData.price_s) > 0) ||
+        (formData.price_m && parseFloat(formData.price_m) > 0) ||
+        (formData.price_l && parseFloat(formData.price_l) > 0) ||
+        (formData.price_xl && parseFloat(formData.price_xl) > 0) ||
+        (formData.price_xxl && parseFloat(formData.price_xxl) > 0)
+      );
+      
+      const hasAnyPrice = hasGeneralPrice || hasDogSizePrices || hasClothingSizePrices;
+      
+      if (!hasAnyPrice) {
+        throw new Error('Debes definir al menos un precio para el producto (precio general o precio por tamaño/talla)');
       }
       if (!formData.stock_quantity || parseInt(formData.stock_quantity) < 0) {
         throw new Error('La cantidad en stock debe ser 0 o mayor');
@@ -127,12 +186,23 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
         product_category: formData.product_category,
         description: formData.description,
         detailed_description: formData.detailed_description,
-        price: parseFloat(formData.price) || 0,
+        price: parseFloat(formData.price) || 0, // Precio general (para retrocompatibilidad)
+        price_small: formData.price_small ? parseFloat(formData.price_small) : null,
+        price_medium: formData.price_medium ? parseFloat(formData.price_medium) : null,
+        price_large: formData.price_large ? parseFloat(formData.price_large) : null,
+        price_extra_large: formData.price_extra_large ? parseFloat(formData.price_extra_large) : null,
+        price_xs: formData.price_xs ? parseFloat(formData.price_xs) : null,
+        price_s: formData.price_s ? parseFloat(formData.price_s) : null,
+        price_m: formData.price_m ? parseFloat(formData.price_m) : null,
+        price_l: formData.price_l ? parseFloat(formData.price_l) : null,
+        price_xl: formData.price_xl ? parseFloat(formData.price_xl) : null,
+        price_xxl: formData.price_xxl ? parseFloat(formData.price_xxl) : null,
         currency: formData.currency,
         stock_quantity: parseInt(formData.stock_quantity) || 0,
         min_stock_alert: parseInt(formData.min_stock_alert) || 5,
         is_active: formData.is_active,
         product_image_url: formData.product_image_url,
+        secondary_images: formData.secondary_images,
         brand: formData.brand,
         weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
         dimensions_cm: formData.dimensions_cm,
@@ -151,7 +221,7 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
     }
   };
 
-  const handleInputChange = (field: string, value: string | boolean | number) => {
+  const handleInputChange = (field: string, value: string | boolean | number | string[]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -220,7 +290,7 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[10000]">
                       {PRODUCT_CATEGORIES.map((category) => (
                         <SelectItem key={category.value} value={category.value}>
                           <span className="mr-2">{category.icon}</span>
@@ -244,25 +314,112 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="product-price">Precio (Q.) *</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Q.</span>
-                    <Input
-                      id="product-price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.price}
-                      onChange={(e) => handleInputChange('price', e.target.value)}
-                      placeholder="0.00"
-                      className="pl-8"
-                      required
-                    />
+              {/* Precio General */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Precio General (Opcional)</Label>
+                <p className="text-sm text-gray-600 mb-3">Usa este campo si el producto no requiere diferenciación por tamaño de perro.</p>
+                <div className="relative max-w-xs">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    {formData.currency === 'GTQ' ? 'Q.' : '$'}
+                  </span>
+                  <Input
+                    id="price-general"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => handleInputChange('price', e.target.value)}
+                    placeholder="0.00"
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              {/* Precios por tamaño de perro */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Precios por Tamaño de Perro (Opcional)</Label>
+                <p className="text-sm text-gray-600 mb-3">O establece el precio para cada tamaño según el peso del perro. Si no aplica, déjalo vacío.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <Label htmlFor="price-small">
+                      Pequeño (Q.)
+                      <span className="block text-xs font-normal text-gray-500 mt-1">Hasta 10 kg</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Q.</span>
+                      <Input
+                        id="price-small"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.price_small}
+                        onChange={(e) => handleInputChange('price_small', e.target.value)}
+                        placeholder="0.00"
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="price-medium">
+                      Mediano (Q.)
+                      <span className="block text-xs font-normal text-gray-500 mt-1">11 - 25 kg</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Q.</span>
+                      <Input
+                        id="price-medium"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.price_medium}
+                        onChange={(e) => handleInputChange('price_medium', e.target.value)}
+                        placeholder="0.00"
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="price-large">
+                      Grande (Q.)
+                      <span className="block text-xs font-normal text-gray-500 mt-1">26 - 45 kg</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Q.</span>
+                      <Input
+                        id="price-large"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.price_large}
+                        onChange={(e) => handleInputChange('price_large', e.target.value)}
+                        placeholder="0.00"
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="price-extra-large">
+                      Extra Grande (Q.)
+                      <span className="block text-xs font-normal text-gray-500 mt-1">Más de 45 kg</span>
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Q.</span>
+                      <Input
+                        id="price-extra-large"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.price_extra_large}
+                        onChange={(e) => handleInputChange('price_extra_large', e.target.value)}
+                        placeholder="0.00"
+                        className="pl-8"
+                      />
+                    </div>
                   </div>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="product-brand">Marca</Label>
                   <Input
@@ -279,7 +436,7 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[10000]">
                       <SelectItem value="GTQ">GTQ - Quetzales</SelectItem>
                       <SelectItem value="USD">USD - Dólares</SelectItem>
                     </SelectContent>
@@ -341,17 +498,19 @@ const ProviderProductModal: React.FC<ProviderProductModalProps> = ({
                 </div>
               </div>
 
-                             <div>
-                 <Label htmlFor="product-image">Imagen del Producto</Label>
-                 <ProductImageUpload
-                   currentImageUrl={formData.product_image_url}
-                   onImageUpload={(url) => handleInputChange('product_image_url', url || '')}
-                   disabled={loading}
-                 />
-                 <p className="text-xs text-gray-500 mt-1">
-                   Sube una imagen representativa del producto para los clientes
-                 </p>
-               </div>
+              <div>
+                <Label htmlFor="product-images">Imágenes del Producto</Label>
+                <ProductMultipleImagesUpload
+                  mainImageUrl={formData.product_image_url}
+                  secondaryImages={formData.secondary_images}
+                  onMainImageUpload={(url) => handleInputChange('product_image_url', url || '')}
+                  onSecondaryImagesChange={(urls) => handleInputChange('secondary_images', urls)}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Sube una imagen principal y hasta 5 imágenes secundarias del producto
+                </p>
+              </div>
 
               <div>
                 <Label htmlFor="product-tags">Etiquetas</Label>

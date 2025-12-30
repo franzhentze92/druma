@@ -112,7 +112,7 @@ const Adopcion: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" style={{ paddingBottom: '100px' }}>
       {/* Header */}
       <div className="p-6">
         <PageHeader 
@@ -166,7 +166,7 @@ const Adopcion: React.FC = () => {
 
         {/* Tab Content */}
         {activeTab === 'catalogo' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
             {/* Filters */}
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-4">
@@ -267,7 +267,7 @@ const Adopcion: React.FC = () => {
       )}
 
       {activeTab === 'tinder' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
             <div className="text-center">
               <h3 className="text-xl font-bold text-gray-800 mb-2">Pet Tinder</h3>
               <p className="text-gray-600">Desliza para encontrar tu mascota perfecta</p>
@@ -354,7 +354,7 @@ const Adopcion: React.FC = () => {
 
 
         {activeTab === 'mis-favoritos' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
             {/* Header */}
                     <div>
               <h3 className="text-xl font-bold text-gray-800">Mis Favoritos</h3>
@@ -443,7 +443,7 @@ const Adopcion: React.FC = () => {
         )}
 
         {activeTab === 'mis-solicitudes' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
             {/* Header */}
             <div>
               <h3 className="text-xl font-bold text-gray-800">Mis Solicitudes</h3>

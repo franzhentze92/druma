@@ -31,6 +31,7 @@ export interface Database {
           phone: string | null
           address: string | null
           avatar_url: string | null
+          role: 'client' | 'provider' | 'shelter' | null
           created_at: string
           updated_at: string
         }
@@ -41,6 +42,7 @@ export interface Database {
           phone?: string | null
           address?: string | null
           avatar_url?: string | null
+          role?: 'client' | 'provider' | 'shelter' | null
           created_at?: string
           updated_at?: string
         }
@@ -51,6 +53,7 @@ export interface Database {
           phone?: string | null
           address?: string | null
           avatar_url?: string | null
+          role?: 'client' | 'provider' | 'shelter' | null
           created_at?: string
           updated_at?: string
         }

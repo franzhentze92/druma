@@ -28,7 +28,7 @@ export const LandingNavbar: React.FC = () => {
               <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                 <PawPrint className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors duration-300">Druma</span>
+              <span className="text-xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors duration-300">PetHub</span>
             </Link>
           </div>
 

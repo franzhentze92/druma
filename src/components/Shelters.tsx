@@ -45,7 +45,7 @@ const Shelters: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 text-white">
         <h2 className="text-2xl font-bold mb-2">Albergues</h2>

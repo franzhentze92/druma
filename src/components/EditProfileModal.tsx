@@ -42,9 +42,9 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose, pr
       const file = event.target.files?.[0]
       if (!file) return
 
-      // Validate file size (5MB limit)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('El archivo es demasiado grande. Máximo 5MB.')
+      // Validate file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
+        alert('El archivo es demasiado grande. Máximo 50MB.')
         return
       }
 
@@ -194,7 +194,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose, pr
                   )}
                 </Button>
                 <p className="text-xs text-gray-500">
-                  JPG, PNG o GIF. Máximo 5MB.
+                  JPG, PNG o GIF. Máximo 50MB.
                 </p>
               </div>
             </div>

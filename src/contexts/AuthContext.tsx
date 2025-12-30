@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null } | null>
   signOut: () => Promise<void>
 }
 
@@ -74,9 +74,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     })
     console.log('AuthContext: Sign up result:', { data, error })
     if (error) throw error
+    return data || null // Return the signup data including the user
   }
 
   const signOut = async () => {
+    // Clear user role from localStorage when signing out
+    localStorage.removeItem('user_role')
+    localStorage.removeItem('is_new_user')
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }

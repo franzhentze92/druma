@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +34,10 @@ import {
   Scale,
   Ruler,
   Image as ImageIcon,
-  Bell
+  Info,
+  FileText,
+  Timer,
+  BookOpen
 } from 'lucide-react';
 import { useProvider, ProviderService, ProviderProduct } from '@/hooks/useProvider';
 import ProviderServiceModal from './ProviderServiceModal';
@@ -44,6 +47,10 @@ import ProviderReviews from './ProviderReviews';
 import ProfilePictureUpload from './ProfilePictureUpload';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import SettingsDropdown from './SettingsDropdown';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format, isSameDay, startOfDay, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale/es';
 
 const SERVICE_CATEGORIES = [
   { value: 'veterinaria', label: 'Veterinaria', icon: '🐕' },
@@ -73,7 +80,13 @@ const PRODUCT_CATEGORIES = [
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      return localStorage.getItem('providerDashboardActiveTab') || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -85,19 +98,44 @@ const PRODUCT_CATEGORIES = [
     totalOrders: 0,
     completedOrders: 0,
     pendingOrders: 0,
+    confirmedOrders: 0,
+    processingOrders: 0,
+    shippedOrders: 0,
+    cancelledOrders: 0,
     totalProductsSold: 0,
     totalServicesBooked: 0,
     averageRating: 0,
-    totalReviews: 0
+    totalReviews: 0,
+    pendingAppointments: 0,
+    confirmedAppointments: 0,
+    completedAppointments: 0,
+    cancelledAppointments: 0,
+    upcomingAppointments: 0,
+    activeServices: 0,
+    inactiveServices: 0,
+    activeProducts: 0,
+    inactiveProducts: 0,
+    lowStockProducts: 0,
+    totalServiceCategories: 0,
+    totalProductCategories: 0
   });
-  const [notifications, setNotifications] = useState<Array<{
-    id: string;
-    type: 'appointment' | 'order' | 'stock' | 'review' | 'verification';
-    title: string;
-    message: string;
-    time: Date;
-    unread: boolean;
-  }>>([]);
+
+  // Listen for tab change events from SettingsDropdown
+  useEffect(() => {
+    const handleTabChange = (event: CustomEvent) => {
+      setActiveTab(event.detail);
+      try {
+        localStorage.setItem('providerDashboardActiveTab', event.detail);
+      } catch {
+        // ignore storage errors
+      }
+    };
+
+    window.addEventListener('providerDashboardTabChange', handleTabChange as EventListener);
+    return () => {
+      window.removeEventListener('providerDashboardTabChange', handleTabChange as EventListener);
+    };
+  }, []);
 
   const {
     profile,
@@ -223,89 +261,38 @@ const PRODUCT_CATEGORIES = [
       const averageRating = profile?.rating || 0;
       const totalReviews = profile?.total_reviews || 0;
 
-      setRevenueData({
+      // Calculate order status breakdown
+      const confirmedOrders = Array.from(orderMap.values()).filter((o: any) => o.status === 'confirmed').length;
+      const processingOrders = Array.from(orderMap.values()).filter((o: any) => o.status === 'processing').length;
+      const shippedOrders = Array.from(orderMap.values()).filter((o: any) => o.status === 'shipped').length;
+      const cancelledOrders = Array.from(orderMap.values()).filter((o: any) => o.status === 'cancelled').length;
+
+      setRevenueData(prev => ({
+        ...prev,
         totalRevenue,
         monthlyRevenue,
         totalOrders,
         completedOrders,
         pendingOrders,
+        confirmedOrders,
+        processingOrders,
+        shippedOrders,
+        cancelledOrders,
         totalProductsSold,
         totalServicesBooked,
         averageRating,
         totalReviews
-      });
+      }));
     } catch (err) {
       console.error('Error fetching revenue data:', err);
     }
   };
 
-  // Generate notifications based on real data
-  const generateNotifications = () => {
-    const newNotifications: Array<{
-      id: string;
-      type: 'appointment' | 'order' | 'stock' | 'review' | 'verification';
-      title: string;
-      message: string;
-      time: Date;
-      unread: boolean;
-    }> = [];
-
-    // Pending appointments notifications
-    const pendingAppointments = appointments.filter(a => a.status === 'pending');
-    if (pendingAppointments.length > 0) {
-      newNotifications.push({
-        id: 'pending-appointments',
-        type: 'appointment',
-        title: 'Citas Pendientes',
-        message: `Tienes ${pendingAppointments.length} cita${pendingAppointments.length > 1 ? 's' : ''} pendiente${pendingAppointments.length > 1 ? 's' : ''} de confirmación`,
-        time: new Date(),
-        unread: true
-      });
-    }
-
-    // Low stock notifications
-    const lowStockProducts = products.filter(p => p.stock_quantity <= p.min_stock_alert);
-    if (lowStockProducts.length > 0) {
-      newNotifications.push({
-        id: 'low-stock',
-        type: 'stock',
-        title: 'Stock Bajo',
-        message: `${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo`,
-        time: new Date(),
-        unread: true
-      });
-    }
-
-    // Verification status notification
-    if (!profile?.is_verified) {
-      newNotifications.push({
-        id: 'verification-pending',
-        type: 'verification',
-        title: 'Verificación Pendiente',
-        message: 'Completa la verificación de tu perfil para mejorar tu visibilidad',
-        time: new Date(),
-        unread: true
-      });
-    }
-
-    // Inactive services notification
-    const inactiveServices = services.filter(s => !s.is_active);
-    if (inactiveServices.length > 0) {
-      newNotifications.push({
-        id: 'inactive-services',
-        type: 'appointment',
-        title: 'Servicios Inactivos',
-        message: `${inactiveServices.length} servicio${inactiveServices.length > 1 ? 's' : ''} inactivo${inactiveServices.length > 1 ? 's' : ''}`,
-        time: new Date(),
-        unread: true
-      });
-    }
-
-    setNotifications(newNotifications);
-  };
-
   // Cities state for location selection
   const [cities, setCities] = useState<Array<{id: number, city_name: string, department: string}>>([]);
+  
+  // Calendar state for appointments
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   // Fetch cities for location selection
   const fetchCities = async () => {
@@ -348,7 +335,49 @@ const PRODUCT_CATEGORIES = [
         delivery_fee: profile.delivery_fee || 0
       });
       fetchRevenueData();
-      generateNotifications();
+      
+      // Update appointment and service/product stats
+      if (appointments && products && services) {
+        const pendingAppointments = appointments.filter(a => a.status === 'pending').length;
+        const confirmedAppointments = appointments.filter(a => a.status === 'confirmed').length;
+        const completedAppointments = appointments.filter(a => a.status === 'completed').length;
+        const cancelledAppointments = appointments.filter(a => a.status === 'cancelled').length;
+        
+        // Get upcoming appointments (future dates)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const upcomingAppointments = appointments.filter(a => {
+          const aptDate = new Date(a.appointment_date);
+          aptDate.setHours(0, 0, 0, 0);
+          return aptDate >= today && (a.status === 'pending' || a.status === 'confirmed');
+        }).length;
+
+        const activeServices = services.filter(s => s.is_active).length;
+        const inactiveServices = services.filter(s => !s.is_active).length;
+        const activeProducts = products.filter(p => p.is_active).length;
+        const inactiveProducts = products.filter(p => !p.is_active).length;
+        const lowStockProducts = products.filter(p => p.stock_quantity <= p.min_stock_alert).length;
+        
+        // Get unique categories
+        const serviceCategories = new Set(services.map(s => s.service_category));
+        const productCategories = new Set(products.map(p => p.product_category));
+
+        setRevenueData(prev => ({
+          ...prev,
+          pendingAppointments,
+          confirmedAppointments,
+          completedAppointments,
+          cancelledAppointments,
+          upcomingAppointments,
+          activeServices,
+          inactiveServices,
+          activeProducts,
+          inactiveProducts,
+          lowStockProducts,
+          totalServiceCategories: serviceCategories.size,
+          totalProductCategories: productCategories.size
+        }));
+      }
     }
   }, [profile, appointments, products, services]);
 
@@ -422,17 +451,31 @@ const PRODUCT_CATEGORIES = [
 
   const handleServiceSave = async (serviceData, availability = [], timeSlots = []) => {
     try {
+      console.log('=== HANDLE SERVICE SAVE ===');
+      console.log('Service data:', serviceData);
+      console.log('Availability array:', availability);
+      console.log('Availability length:', availability.length);
+      console.log('Time slots array:', timeSlots);
+      console.log('Time slots length:', timeSlots.length);
+      console.log('Is editing:', !!editingService);
+      console.log('Editing service ID:', editingService?.id);
+      
       let savedService;
       if (editingService) {
         savedService = await updateService(editingService.id, serviceData);
+        console.log('Service updated, ID:', savedService.id);
         
         // Save availability and time slots for existing service
-        if (availability.length > 0) {
-          await saveServiceAvailability(editingService.id, availability);
-        }
-        if (timeSlots.length > 0) {
-          await saveServiceTimeSlots(editingService.id, timeSlots);
-        }
+        // Always save availability (even if empty array) to clear previous data
+        console.log('Saving availability for service:', editingService.id);
+        console.log('Availability to save:', availability);
+        await saveServiceAvailability(editingService.id, availability);
+        console.log('Availability saved successfully');
+        
+        // Always save time slots (even if empty array) to clear previous data
+        console.log('Saving time slots for service:', editingService.id);
+        await saveServiceTimeSlots(editingService.id, timeSlots);
+        console.log('Time slots saved successfully');
         
         toast({
           title: "✅ Servicio Actualizado",
@@ -442,13 +485,26 @@ const PRODUCT_CATEGORIES = [
         });
       } else {
         savedService = await addService(serviceData);
+        console.log('Service created, ID:', savedService.id);
         
         // Save availability and time slots for new service
+        // Always save availability (even if empty array) to ensure data is saved
+        console.log('Saving availability for new service:', savedService.id);
+        console.log('Availability to save:', availability);
         if (availability.length > 0) {
           await saveServiceAvailability(savedService.id, availability);
+          console.log('Availability saved successfully');
+        } else {
+          console.warn('⚠️ No availability data to save (empty array)');
         }
+        
+        // Always save time slots (even if empty array)
+        console.log('Saving time slots for new service:', savedService.id);
         if (timeSlots.length > 0) {
           await saveServiceTimeSlots(savedService.id, timeSlots);
+          console.log('Time slots saved successfully');
+        } else {
+          console.warn('⚠️ No time slots data to save (empty array)');
         }
         
         toast({
@@ -459,11 +515,17 @@ const PRODUCT_CATEGORIES = [
         });
       }
 
+      console.log('=== SERVICE SAVE COMPLETE ===');
       setEditingService(null);
       setIsEditing(false);
       setIsServiceModalOpen(false);
     } catch (error) {
-      console.error('Error saving service:', error);
+      console.error('❌ Error saving service:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error: error
+      });
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       toast({
         title: "❌ Error al Guardar",
@@ -471,6 +533,7 @@ const PRODUCT_CATEGORIES = [
         variant: "destructive",
         duration: 6000,
       });
+      throw error; // Re-throw to prevent silent failures
     }
   };
 
@@ -700,89 +763,7 @@ const PRODUCT_CATEGORIES = [
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* Notification Bell */}
-            {notifications.length > 0 && (
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="relative"
-                  onClick={() => {
-                    // Toggle notifications visibility
-                    const notificationElement = document.getElementById('notifications-dropdown');
-                    if (notificationElement) {
-                      notificationElement.classList.toggle('hidden');
-                    }
-                  }}
-                >
-                  <Bell className="w-4 h-4" />
-                  {notifications.filter(n => n.unread).length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {notifications.filter(n => n.unread).length}
-                    </span>
-                  )}
-                </Button>
-                
-                {/* Notifications Dropdown */}
-                <div 
-                  id="notifications-dropdown"
-                  className="hidden absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
-                >
-                  <div className="p-3 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-800">Notificaciones</h3>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {notifications.map((notification) => (
-                      <div 
-                        key={notification.id} 
-                        className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                          notification.unread ? 'bg-blue-50' : ''
-                        }`}
-                        onClick={() => {
-                          // Mark as read
-                          setNotifications(prev => 
-                            prev.map(n => 
-                              n.id === notification.id ? { ...n, unread: false } : n
-                            )
-                          );
-                        }}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2 rounded-full ${
-                            notification.type === 'appointment' ? 'bg-blue-100' :
-                            notification.type === 'stock' ? 'bg-orange-100' :
-                            notification.type === 'verification' ? 'bg-yellow-100' :
-                            'bg-gray-100'
-                          }`}>
-                            {notification.type === 'appointment' && <Calendar className="w-4 h-4 text-blue-600" />}
-                            {notification.type === 'stock' && <AlertCircle className="w-4 h-4 text-orange-600" />}
-                            {notification.type === 'verification' && <CheckCircle className="w-4 h-4 text-yellow-600" />}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-800 text-sm">{notification.title}</p>
-                            <p className="text-gray-600 text-xs mt-1">{notification.message}</p>
-                            <p className="text-gray-400 text-xs mt-1">
-                              {notification.time.toLocaleTimeString('es-GT', { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                              })}
-                            </p>
-                          </div>
-                          {notification.unread && (
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {notifications.length === 0 && (
-                    <div className="p-4 text-center text-gray-500 text-sm">
-                      No hay notificaciones
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <SettingsDropdown variant="default" />
             
             <Badge variant="secondary" className="text-sm">
               <Building2 className="w-4 h-4 mr-2" />
@@ -807,7 +788,18 @@ const PRODUCT_CATEGORIES = [
       </div>
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(value) => {
+          setActiveTab(value);
+          try {
+            localStorage.setItem('providerDashboardActiveTab', value);
+          } catch {
+            // ignore storage errors
+          }
+        }} 
+        className="space-y-6"
+      >
         <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger 
             value="dashboard" 
@@ -870,43 +862,9 @@ const PRODUCT_CATEGORIES = [
             </Card>
           ) : (
             <>
-              {/* Key Metrics Cards */}
+              {/* Key Metrics Cards - Expanded */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Productos Vendidos</p>
-                        <p className="text-2xl font-bold text-emerald-600">{revenueData.totalProductsSold}</p>
-                      </div>
-                      <div className="p-3 bg-emerald-100 rounded-full">
-                        <Package className="w-6 h-6 text-emerald-600" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {products.filter(p => p.is_active).length} productos activos
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Servicios Reservados</p>
-                        <p className="text-2xl font-bold text-blue-600">{revenueData.totalServicesBooked}</p>
-                      </div>
-                      <div className="p-3 bg-blue-100 rounded-full">
-                        <Calendar className="w-6 h-6 text-blue-600" />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {appointments.filter(a => a.status === 'completed').length} completados
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
+                <Card className="border-l-4 border-l-green-500">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div>
@@ -920,24 +878,142 @@ const PRODUCT_CATEGORIES = [
                     <p className="text-xs text-gray-500 mt-1">
                       {revenueData.completedOrders} órdenes completadas
                     </p>
+                    <p className="text-xs text-green-600 mt-1 font-medium">
+                      Q{revenueData.monthlyRevenue.toFixed(0)} este mes
+                    </p>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-l-4 border-l-blue-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Total Órdenes</p>
+                        <p className="text-2xl font-bold text-blue-600">{revenueData.totalOrders}</p>
+                      </div>
+                      <div className="p-3 bg-blue-100 rounded-full">
+                        <Package className="w-6 h-6 text-blue-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Promedio: Q{revenueData.totalOrders > 0 ? (revenueData.totalRevenue / revenueData.totalOrders).toFixed(0) : '0'}
+                    </p>
+                    <div className="flex gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">{revenueData.pendingOrders} Pendientes</Badge>
+                      <Badge variant="outline" className="text-xs">{revenueData.confirmedOrders} Confirmadas</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-emerald-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Productos Vendidos</p>
+                        <p className="text-2xl font-bold text-emerald-600">{revenueData.totalProductsSold}</p>
+                      </div>
+                      <div className="p-3 bg-emerald-100 rounded-full">
+                        <Package className="w-6 h-6 text-emerald-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {revenueData.activeProducts} activos • {revenueData.lowStockProducts} stock bajo
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-1 font-medium">
+                      {revenueData.totalProductCategories} categorías
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-purple-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Servicios Reservados</p>
+                        <p className="text-2xl font-bold text-purple-600">{revenueData.totalServicesBooked}</p>
+                      </div>
+                      <div className="p-3 bg-purple-100 rounded-full">
+                        <Calendar className="w-6 h-6 text-purple-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {revenueData.activeServices} activos • {revenueData.upcomingAppointments} próximas
+                    </p>
+                    <p className="text-xs text-purple-600 mt-1 font-medium">
+                      {revenueData.totalServiceCategories} categorías
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Secondary Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="border-l-4 border-l-yellow-500">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Calificación</p>
-                        <p className="text-2xl font-bold text-purple-600">
+                        <p className="text-2xl font-bold text-yellow-600">
                           {revenueData.averageRating > 0 ? `${revenueData.averageRating.toFixed(1)}/5` : 'N/A'}
                         </p>
                       </div>
-                      <div className="p-3 bg-purple-100 rounded-full">
-                        <Star className="w-6 h-6 text-purple-600" />
+                      <div className="p-3 bg-yellow-100 rounded-full">
+                        <Star className="w-6 h-6 text-yellow-600" />
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {revenueData.totalReviews} reseñas reales
+                      {revenueData.totalReviews} reseñas
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-orange-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Citas Pendientes</p>
+                        <p className="text-2xl font-bold text-orange-600">{revenueData.pendingAppointments}</p>
+                      </div>
+                      <div className="p-3 bg-orange-100 rounded-full">
+                        <Clock className="w-6 h-6 text-orange-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {revenueData.confirmedAppointments} confirmadas • {revenueData.completedAppointments} completadas
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-red-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Stock Bajo</p>
+                        <p className="text-2xl font-bold text-red-600">{revenueData.lowStockProducts}</p>
+                      </div>
+                      <div className="p-3 bg-red-100 rounded-full">
+                        <AlertCircle className="w-6 h-6 text-red-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Requieren atención
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-indigo-500">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Órdenes En Proceso</p>
+                        <p className="text-2xl font-bold text-indigo-600">{revenueData.processingOrders + revenueData.shippedOrders}</p>
+                      </div>
+                      <div className="p-3 bg-indigo-100 rounded-full">
+                        <Package className="w-6 h-6 text-indigo-600" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {revenueData.processingOrders} procesando • {revenueData.shippedOrders} enviadas
                     </p>
                   </CardContent>
                 </Card>
@@ -956,38 +1032,87 @@ const PRODUCT_CATEGORIES = [
                   <CardContent>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-emerald-50 p-4 rounded-lg">
-                          <h4 className="font-semibold text-emerald-800 mb-2">Servicios</h4>
+                        <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                          <h4 className="font-semibold text-emerald-800 mb-2 flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            Servicios
+                          </h4>
                           <div className="space-y-1 text-sm text-emerald-700">
                             <p>• {revenueData.totalServicesBooked} servicios reservados</p>
-                            <p>• {services.filter(s => s.is_active).length} servicios activos</p>
+                            <p>• {revenueData.activeServices} activos • {revenueData.inactiveServices} inactivos</p>
+                            <p>• {revenueData.upcomingAppointments} próximas citas</p>
                             <p>• Promedio: Q{services.length > 0 ? (services.reduce((sum, s) => sum + s.price, 0) / services.length).toFixed(0) : 0}</p>
+                            <p>• {revenueData.totalServiceCategories} categorías diferentes</p>
                           </div>
                         </div>
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <h4 className="font-semibold text-blue-800 mb-2">Productos</h4>
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                            <Package className="w-4 h-4" />
+                            Productos
+                          </h4>
                           <div className="space-y-1 text-sm text-blue-700">
                             <p>• {revenueData.totalProductsSold} productos vendidos</p>
-                            <p>• {products.filter(p => p.is_active).length} productos activos</p>
-                            <p>• {products.filter(p => p.stock_quantity <= p.min_stock_alert).length} con stock bajo</p>
+                            <p>• {revenueData.activeProducts} activos • {revenueData.inactiveProducts} inactivos</p>
+                            <p>• {revenueData.lowStockProducts} con stock bajo</p>
+                            <p>• {revenueData.totalProductCategories} categorías diferentes</p>
                           </div>
                         </div>
                       </div>
                       
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <h4 className="font-semibold text-gray-800 mb-2">Información del Negocio</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                          <h4 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                            <Package className="w-4 h-4" />
+                            Órdenes
+                          </h4>
+                          <div className="space-y-1 text-sm text-purple-700">
+                            <p>• {revenueData.totalOrders} total</p>
+                            <p>• {revenueData.completedOrders} completadas</p>
+                            <p>• {revenueData.pendingOrders} pendientes</p>
+                            <p>• {revenueData.confirmedOrders} confirmadas</p>
+                            <p>• {revenueData.processingOrders} procesando</p>
+                            <p>• {revenueData.shippedOrders} enviadas</p>
+                            <p>• {revenueData.cancelledOrders} canceladas</p>
+                          </div>
+                        </div>
+                        <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                          <h4 className="font-semibold text-orange-800 mb-2 flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            Citas
+                          </h4>
+                          <div className="space-y-1 text-sm text-orange-700">
+                            <p>• {appointments.length} total</p>
+                            <p>• {revenueData.pendingAppointments} pendientes</p>
+                            <p>• {revenueData.confirmedAppointments} confirmadas</p>
+                            <p>• {revenueData.completedAppointments} completadas</p>
+                            <p>• {revenueData.cancelledAppointments} canceladas</p>
+                            <p>• {revenueData.upcomingAppointments} próximas</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          Información del Negocio
+                        </h4>
                         <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
                           <div>
                             <p><strong>Tipo:</strong> {profile.business_type || 'No especificado'}</p>
                             <p><strong>Ciudad:</strong> {profile.city_id ? cities.find(c => c.id === profile.city_id)?.city_name || 'No especificada' : 'No especificada'}</p>
+                            <p><strong>Dirección:</strong> {profile.address || 'No especificada'}</p>
+                            <p><strong>Teléfono:</strong> {profile.phone || 'No especificado'}</p>
                           </div>
                           <div>
                             <p><strong>Verificación:</strong> 
                               <Badge variant={profile.is_verified ? "default" : "secondary"} className="ml-2">
-                                {profile.is_verified ? "Verificado" : "Pendiente"}
+                                {profile.is_verified ? "✓ Verificado" : "⏳ Pendiente"}
                               </Badge>
                             </p>
-                            <p><strong>Entrega:</strong> {profile.has_delivery ? "Disponible" : "No disponible"}</p>
+                            <p><strong>Entrega:</strong> {profile.has_delivery ? "✓ Disponible" : "✗ No disponible"}</p>
+                            <p><strong>Recogida:</strong> {profile.has_pickup ? "✓ Disponible" : "✗ No disponible"}</p>
+                            {profile.has_delivery && <p><strong>Costo entrega:</strong> Q{profile.delivery_fee || 0}</p>}
+                            <p><strong>Calificación:</strong> {revenueData.averageRating > 0 ? `${revenueData.averageRating.toFixed(1)}/5` : 'N/A'} ({revenueData.totalReviews} reseñas)</p>
                           </div>
                         </div>
                       </div>
@@ -1684,6 +1809,7 @@ const PRODUCT_CATEGORIES = [
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="text-left py-3 px-4 font-semibold text-gray-900 text-sm uppercase tracking-wider">Servicio</th>
+                        <th className="text-left py-3 px-4 font-semibold text-gray-900 text-sm uppercase tracking-wider">Foto</th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-900 text-sm uppercase tracking-wider">Categoría</th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-900 text-sm uppercase tracking-wider">Precio</th>
                         <th className="text-left py-3 px-4 font-semibold text-gray-900 text-sm uppercase tracking-wider">Duración</th>
@@ -1706,6 +1832,23 @@ const PRODUCT_CATEGORIES = [
                                 <p className="text-xs text-gray-500 mt-1 line-clamp-1">
                                   {service.detailed_description}
                                 </p>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Service Image */}
+                          <td className="py-4 px-4">
+                            <div className="flex items-center justify-center">
+                              {service.service_image_url ? (
+                                <img
+                                  src={service.service_image_url}
+                                  alt={service.service_name}
+                                  className="w-12 h-12 object-cover rounded-md border border-gray-200"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 flex items-center justify-center bg-gray-100 rounded-md border border-gray-200">
+                                  <ImageIcon className="w-6 h-6 text-gray-400" />
+                                </div>
                               )}
                             </div>
                           </td>
@@ -1875,17 +2018,70 @@ const PRODUCT_CATEGORIES = [
 
                           {/* Price */}
                           <td className="py-4 px-4">
-                            <div className="flex items-center gap-2">
-                              <Coins className="w-4 h-4 text-emerald-600" />
-                              <span className="font-medium text-gray-900">
-                                {product.currency === 'GTQ' ? 'Q.' : '$'}{product.price}
-                              </span>
-                            </div>
-                            {product.weight_kg && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {product.weight_kg} kg
-                              </p>
-                            )}
+                            {(() => {
+                              // Check if product has size-based prices
+                              const sizePrices = [
+                                product.price_small,
+                                product.price_medium,
+                                product.price_large,
+                                product.price_extra_large
+                              ].filter((p): p is number => p !== null && p !== undefined);
+                              
+                              const currencySymbol = product.currency === 'GTQ' ? 'Q.' : '$';
+                              
+                              if (sizePrices.length > 0) {
+                                // Show price range
+                                const minPrice = Math.min(...sizePrices);
+                                const maxPrice = Math.max(...sizePrices);
+                                
+                                if (minPrice === maxPrice) {
+                                  // All prices are the same
+                                  return (
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <Coins className="w-4 h-4 text-emerald-600" />
+                                        <span className="font-medium text-gray-900">
+                                          {currencySymbol}{minPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Todos los tamaños
+                                      </p>
+                                    </div>
+                                  );
+                                } else {
+                                  // Show range
+                                  return (
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <Coins className="w-4 h-4 text-emerald-600" />
+                                        <span className="font-medium text-gray-900">
+                                          {currencySymbol}{minPrice.toFixed(2)} - {currencySymbol}{maxPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Por tamaño
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                              } else {
+                                // Show general price
+                                return (
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <Coins className="w-4 h-4 text-emerald-600" />
+                                      <span className="font-medium text-gray-900">
+                                        {currencySymbol}{product.price.toFixed(2)}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Precio general
+                                    </p>
+                                  </div>
+                                );
+                              }
+                            })()}
                           </td>
 
                           {/* Stock */}
@@ -1957,93 +2153,250 @@ const PRODUCT_CATEGORIES = [
 
         {/* Appointments Tab */}
         <TabsContent value="appointments" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Mis Citas
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100/50">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <Calendar className="w-6 h-6 text-emerald-700" />
+                </div>
+                <span className="text-gray-800">Mis Citas</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {appointments.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                  <p>No hay citas programadas</p>
-                  <p className="text-sm">Las citas aparecerán aquí cuando los clientes las reserven</p>
+                <div className="text-center py-16 text-gray-500">
+                  <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center">
+                    <Calendar className="w-12 h-12 text-emerald-400" />
+                  </div>
+                  <p className="text-lg font-medium text-gray-700 mb-2">No hay citas programadas</p>
+                  <p className="text-sm text-gray-500">Las citas aparecerán aquí cuando los clientes las reserven</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {appointments.map((appointment) => (
-                    <div key={appointment.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-gray-900">
-                              {appointment.provider_services?.service_name || 'Servicio'}
-                            </h3>
-                            <Badge variant={getStatusBadgeVariant(appointment.status)}>
-                              {getStatusIcon(appointment.status)}
-                              <span className="ml-1">
-                                {appointment.status === 'confirmed' && 'Confirmada'}
-                                {appointment.status === 'pending' && 'Pendiente'}
-                                {appointment.status === 'cancelled' && 'Cancelada'}
-                                {appointment.status === 'completed' && 'Completada'}
-                              </span>
-                            </Badge>
-                          </div>
-                                                     <p className="text-gray-600 text-sm mb-2">
-                             Cliente: {appointment.client_email || 'N/A'}
-                           </p>
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
-                            <span>
-                              Fecha: {new Date(appointment.appointment_date).toLocaleDateString()}
-                            </span>
-                            <span>
-                              Hora: {new Date(appointment.appointment_date).toLocaleTimeString()}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Coins className="w-4 h-4" />
-                              {appointment.provider_services?.currency === 'GTQ' ? 'Q.' : '$'}{appointment.provider_services?.price || 0}
-                            </span>
-                          </div>
-                          {appointment.notes && (
-                            <p className="text-gray-600 text-sm mt-2">
-                              Notas: {appointment.notes}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {appointment.status === 'pending' && (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => handleAppointmentStatusUpdate(appointment.id, 'confirmed')}
-                              >
-                                Confirmar
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleAppointmentStatusUpdate(appointment.id, 'cancelled')}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                Cancelar
-                              </Button>
-                            </>
-                          )}
-                          {appointment.status === 'confirmed' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAppointmentStatusUpdate(appointment.id, 'completed')}
-                            >
-                              Marcar Completada
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Calendar View */}
+                  <div className="lg:col-span-8">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8">
+                      <CalendarComponent
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        locale={es}
+                        className="rounded-lg w-full"
+                        style={{ fontSize: '1rem' }}
+                        classNames={{
+                          months: "flex flex-col space-y-3 w-full",
+                          month: "space-y-3 w-full",
+                          caption: "flex justify-center pt-1 relative items-center mb-4",
+                          caption_label: "text-2xl font-bold text-gray-800",
+                          nav: "space-x-2 flex items-center",
+                          nav_button: "h-9 w-9 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm border border-gray-200",
+                          table: "w-full border-collapse space-y-1",
+                          head_row: "flex mb-2",
+                          head_cell: "text-gray-600 rounded-md w-16 font-bold text-base uppercase tracking-wide",
+                          row: "flex w-full mt-1",
+                          cell: "h-12 w-16 text-center p-0 relative flex items-center justify-center",
+                          day: "h-12 w-16 rounded-lg font-semibold hover:bg-emerald-50 transition-all duration-200 text-base",
+                          day_selected: "bg-gradient-to-br from-emerald-500 to-teal-500 text-white font-bold shadow-lg hover:from-emerald-600 hover:to-teal-600 scale-105 ring-2 ring-emerald-200",
+                          day_today: "bg-emerald-100 text-emerald-700 font-bold border-2 border-emerald-400",
+                          day_outside: "text-gray-400 opacity-50",
+                        }}
+                        modifiers={{
+                          hasAppointments: appointments.map(apt => 
+                            startOfDay(parseISO(apt.appointment_date))
+                          )
+                        }}
+                        modifiersClassNames={{
+                          hasAppointments: "bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-800 font-semibold border border-blue-200 hover:from-blue-200 hover:to-indigo-200"
+                        }}
+                      />
                     </div>
-                  ))}
+                  </div>
+                  
+                  {/* Appointments List for Selected Date */}
+                  <div className="lg:col-span-4">
+                    <div className="sticky top-6">
+                      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 border border-gray-200">
+                        <h3 className="font-bold text-lg text-gray-800 capitalize">
+                          {selectedDate ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: es }) : 'Selecciona una fecha'}
+                        </h3>
+                        {selectedDate && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length} 
+                            {' '}cita{appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                      {selectedDate ? (
+                        <div className="space-y-4 max-h-[650px] overflow-y-auto pr-2 custom-scrollbar">
+                          {appointments
+                            .filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate))
+                            .sort((a, b) => {
+                              const timeA = a.appointment_time || '00:00';
+                              const timeB = b.appointment_time || '00:00';
+                              return timeA.localeCompare(timeB);
+                            })
+                            .map((appointment) => (
+                              <div 
+                                key={appointment.id} 
+                                className="group relative bg-white border-2 border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-lg transition-all duration-300"
+                              >
+                                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                <div className="relative">
+                                  <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                        <h4 className="font-bold text-gray-900 text-base truncate">
+                                          {appointment.provider_services?.service_name || 'Servicio'}
+                                        </h4>
+                                        <Badge 
+                                          variant={getStatusBadgeVariant(appointment.status)} 
+                                          className="shrink-0 text-xs font-semibold px-2 py-1 shadow-sm"
+                                        >
+                                          {getStatusIcon(appointment.status)}
+                                          <span className="ml-1.5">
+                                            {appointment.status === 'confirmed' && 'Confirmada'}
+                                            {appointment.status === 'pending' && 'Pendiente'}
+                                            {appointment.status === 'cancelled' && 'Cancelada'}
+                                            {appointment.status === 'completed' && 'Completada'}
+                                          </span>
+                                        </Badge>
+                                      </div>
+                                      <div className="space-y-2.5">
+                                        {appointment.provider_services?.service_category && (
+                                          <div className="flex items-center gap-2 text-sm text-gray-700 bg-purple-50 rounded-lg px-3 py-2 border border-purple-100">
+                                            <Tag className="w-4 h-4 text-purple-600 shrink-0" />
+                                            <span className="font-medium capitalize">{appointment.provider_services.service_category}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                          <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+                                          <span className="font-medium">
+                                            {appointment.appointment_time || format(parseISO(appointment.appointment_date), 'HH:mm')}
+                                          </span>
+                                        </div>
+                                        {appointment.provider_services?.duration_minutes && (
+                                          <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                            <Timer className="w-4 h-4 text-blue-600 shrink-0" />
+                                            <span className="font-medium">Duración: {appointment.provider_services.duration_minutes} minutos</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                          <User className="w-4 h-4 text-blue-600 shrink-0" />
+                                          <span className="truncate font-medium">{appointment.client_email || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-gray-700 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg px-3 py-2 border border-emerald-100">
+                                          <Coins className="w-4 h-4 text-emerald-600 shrink-0" />
+                                          <span className="font-bold text-emerald-700">
+                                            {appointment.provider_services?.currency === 'GTQ' ? 'Q.' : '$'}{appointment.provider_services?.price || 0}
+                                          </span>
+                                        </div>
+                                        {appointment.provider_services?.description && (
+                                          <div className="mt-3 pt-3 border-t border-gray-200">
+                                            <div className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                                              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                              <div>
+                                                <span className="font-semibold text-blue-700 block mb-1">Descripción:</span>
+                                                <p className="text-gray-700">{appointment.provider_services.description}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {appointment.provider_services?.detailed_description && (
+                                          <div className="pt-2">
+                                            <div className="flex items-start gap-2 text-xs text-gray-600 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                                              <BookOpen className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                              <div>
+                                                <span className="font-semibold text-blue-700 block mb-1">Detalles:</span>
+                                                <p className="text-gray-700">{appointment.provider_services.detailed_description}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {appointment.provider_services?.preparation_instructions && (
+                                          <div className="pt-2">
+                                            <div className="flex items-start gap-2 text-xs text-gray-600 bg-yellow-50 rounded-lg px-3 py-2 border border-yellow-200">
+                                              <FileText className="w-4 h-4 text-yellow-700 shrink-0 mt-0.5" />
+                                              <div>
+                                                <span className="font-semibold text-yellow-800 block mb-1">Instrucciones de Preparación:</span>
+                                                <p className="text-gray-700">{appointment.provider_services.preparation_instructions}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {appointment.provider_services?.cancellation_policy && (
+                                          <div className="pt-2">
+                                            <div className="flex items-start gap-2 text-xs text-gray-600 bg-orange-50 rounded-lg px-3 py-2 border border-orange-200">
+                                              <AlertCircle className="w-4 h-4 text-orange-700 shrink-0 mt-0.5" />
+                                              <div>
+                                                <span className="font-semibold text-orange-800 block mb-1">Política de Cancelación:</span>
+                                                <p className="text-gray-700">{appointment.provider_services.cancellation_policy}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {appointment.notes && (
+                                          <div className="mt-3 pt-3 border-t border-gray-200">
+                                            <p className="text-xs text-gray-600 italic bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                                              <span className="font-semibold text-blue-700">Notas del Cliente:</span> {appointment.notes}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-2 mt-4">
+                                    {appointment.status === 'pending' && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          className="text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-md hover:shadow-lg transition-all"
+                                          onClick={() => handleAppointmentStatusUpdate(appointment.id, 'confirmed')}
+                                        >
+                                          ✓ Confirmar
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-xs font-semibold border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 transition-all"
+                                          onClick={() => handleAppointmentStatusUpdate(appointment.id, 'cancelled')}
+                                        >
+                                          ✕ Cancelar
+                                        </Button>
+                                      </>
+                                    )}
+                                    {appointment.status === 'confirmed' && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-xs font-semibold border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400 transition-all"
+                                        onClick={() => handleAppointmentStatusUpdate(appointment.id, 'completed')}
+                                      >
+                                        ✓ Marcar Completada
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          {appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length === 0 && (
+                            <div className="text-center py-12 text-gray-500">
+                              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                                <Calendar className="w-8 h-8 text-gray-400" />
+                              </div>
+                              <p className="font-medium text-gray-600">No hay citas para este día</p>
+                              <p className="text-sm text-gray-500 mt-1">Selecciona otra fecha</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                          <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                          <p className="font-medium text-gray-600">Selecciona una fecha</p>
+                          <p className="text-sm text-gray-500 mt-1">en el calendario para ver las citas</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -2095,7 +2448,12 @@ const PRODUCT_CATEGORIES = [
           setIsProductModalOpen(false);
           setEditingProduct(null);
         }}
-        onSave={handleProductSave}
+        onSave={async (productData) => {
+          await handleProductSave(productData);
+          // Clear editing state after save
+          setEditingProduct(null);
+          setIsProductModalOpen(false);
+        }}
         product={editingProduct}
         isEditing={!!editingProduct}
       />

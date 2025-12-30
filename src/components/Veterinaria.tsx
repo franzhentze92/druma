@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -24,7 +24,10 @@ import {
   BarChart3,
   FileImage,
   Download,
-  Eye
+  Eye,
+  Edit,
+  Trash2,
+  Receipt
 } from 'lucide-react';
 import PageHeader from './PageHeader';
 import { useNavigation } from '@/contexts/NavigationContext';
@@ -44,19 +47,20 @@ interface VeterinarySession {
   appointment_type: string;
   date: string;
   veterinarian_name: string;
+  veterinary_clinic?: string;
   diagnosis: string;
   treatment: string;
   notes: string;
   prescription: string;
   follow_up_date: string;
   cost: number;
-  pdf_url: string;
+  pdf_url?: string;
+  invoice_url?: string;
   created_at: string;
 }
 
 const Veterinaria: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { isMobileMenuOpen, toggleMobileMenu } = useNavigation();
 
   // States
@@ -64,12 +68,14 @@ const Veterinaria: React.FC = () => {
   const [veterinarySessions, setVeterinarySessions] = useState<VeterinarySession[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPetForAnalytics, setSelectedPetForAnalytics] = useState('all');
+  const [activeTab, setActiveTab] = useState('register');
   
   // Form states
   const [selectedPet, setSelectedPet] = useState('');
   const [appointmentType, setAppointmentType] = useState('');
   const [appointmentDate, setAppointmentDate] = useState(new Date().toISOString().split('T')[0]);
   const [veterinarianName, setVeterinarianName] = useState('');
+  const [veterinaryClinic, setVeterinaryClinic] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [treatment, setTreatment] = useState('');
   const [notes, setNotes] = useState('');
@@ -77,6 +83,8 @@ const Veterinaria: React.FC = () => {
   const [followUpDate, setFollowUpDate] = useState('');
   const [cost, setCost] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [editingSession, setEditingSession] = useState<VeterinarySession | null>(null);
 
   // Load data
   useEffect(() => {
@@ -140,6 +148,7 @@ const Veterinaria: React.FC = () => {
     setAppointmentType('');
     setAppointmentDate(new Date().toISOString().split('T')[0]);
     setVeterinarianName('');
+    setVeterinaryClinic('');
     setDiagnosis('');
     setTreatment('');
     setNotes('');
@@ -147,22 +156,47 @@ const Veterinaria: React.FC = () => {
     setFollowUpDate('');
     setCost('');
     setPdfFile(null);
+    setInvoiceFile(null);
+    setEditingSession(null);
   };
 
-  const handleFileUpload = async (file: File) => {
+  const loadSessionForEdit = (session: VeterinarySession) => {
+    setEditingSession(session);
+    setSelectedPet(session.pet_id);
+    setAppointmentType(session.appointment_type);
+    setAppointmentDate(session.date);
+    setVeterinarianName(session.veterinarian_name);
+    setVeterinaryClinic(session.veterinary_clinic || '');
+    setDiagnosis(session.diagnosis);
+    setTreatment(session.treatment || '');
+    setNotes(session.notes || '');
+    setPrescription(session.prescription || '');
+    setFollowUpDate(session.follow_up_date || '');
+    setCost(session.cost?.toString() || '');
+    setPdfFile(null);
+    setInvoiceFile(null);
+    // Switch to register tab
+    setActiveTab('register');
+    // Scroll to top of form
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleFileUpload = async (file: File, folder: string = 'veterinary-documents') => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${user?.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('veterinary-documents')
+        .from(folder)
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage
-        .from('veterinary-documents')
+        .from(folder)
         .getPublicUrl(filePath);
 
       return data.publicUrl;
@@ -176,19 +210,20 @@ const Veterinaria: React.FC = () => {
     e.preventDefault();
     
     if (!selectedPet || !appointmentType || !veterinarianName || !diagnosis) {
-      toast({
-        title: "Error",
-        description: "Por favor, completa todos los campos obligatorios.",
-        variant: "destructive",
-      });
+      toast.error("Por favor, completa todos los campos obligatorios.");
       return;
     }
 
     setLoading(true);
     try {
-      let pdfUrl = '';
+      let pdfUrl = editingSession?.pdf_url || '';
       if (pdfFile) {
         pdfUrl = await handleFileUpload(pdfFile);
+      }
+
+      let invoiceUrl = editingSession?.invoice_url || '';
+      if (invoiceFile) {
+        invoiceUrl = await handleFileUpload(invoiceFile);
       }
 
       const veterinaryData = {
@@ -196,6 +231,7 @@ const Veterinaria: React.FC = () => {
         appointment_type: appointmentType,
         date: appointmentDate,
         veterinarian_name: veterinarianName,
+        veterinary_clinic: veterinaryClinic || null,
         diagnosis: diagnosis,
         treatment: treatment || null,
         notes: notes || null,
@@ -203,29 +239,69 @@ const Veterinaria: React.FC = () => {
         follow_up_date: followUpDate || null,
         cost: cost ? parseFloat(cost) : null,
         pdf_url: pdfUrl || null,
+        invoice_url: invoiceUrl || null,
         owner_id: user?.id
       };
 
-      const { error } = await supabase
-        .from('veterinary_sessions')
-        .insert([veterinaryData]);
+      if (editingSession) {
+        // Update existing session
+        const { error } = await supabase
+          .from('veterinary_sessions')
+          .update(veterinaryData)
+          .eq('id', editingSession.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "¡Éxito!",
-        description: "Sesión veterinaria registrada correctamente.",
-      });
+        toast.success("¡Visita veterinaria actualizada correctamente!");
+      } else {
+        // Create new session
+        const { error } = await supabase
+          .from('veterinary_sessions')
+          .insert([veterinaryData]);
+
+        if (error) throw error;
+
+        toast.success("¡Visita veterinaria registrada correctamente!");
+      }
 
       resetForm();
       loadVeterinarySessions();
+      // Switch back to history tab after saving
+      if (editingSession) {
+        setActiveTab('history');
+      }
     } catch (error) {
       console.error('Error saving veterinary session:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo registrar la sesión veterinaria.",
-        variant: "destructive",
-      });
+      toast.error(
+        editingSession 
+          ? "No se pudo actualizar la visita veterinaria." 
+          : "No se pudo registrar la visita veterinaria."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteVeterinarySession = async (sessionId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta visita veterinaria?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('veterinary_sessions')
+        .delete()
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast.success("¡Visita veterinaria eliminada correctamente!");
+
+      loadVeterinarySessions();
+    } catch (error) {
+      console.error('Error deleting veterinary session:', error);
+      toast.error("No se pudo eliminar la visita veterinaria.");
     } finally {
       setLoading(false);
     }
@@ -324,7 +400,7 @@ const Veterinaria: React.FC = () => {
   const chartData = getChartData();
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       <PageHeader 
         title="Veterinaria"
         subtitle="Registra y gestiona las visitas veterinarias de tus mascotas"
@@ -336,9 +412,11 @@ const Veterinaria: React.FC = () => {
         <Stethoscope className="w-8 h-8" />
       </PageHeader>
 
-      <Tabs defaultValue="register" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="register">Registrar Visita</TabsTrigger>
+          <TabsTrigger value="register">
+            {editingSession ? 'Editar Visita' : 'Registrar Visita'}
+          </TabsTrigger>
           <TabsTrigger value="analytics">Análisis</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
         </TabsList>
@@ -348,7 +426,7 @@ const Veterinaria: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Stethoscope className="w-5 h-5 text-red-600" />
-                Nueva Visita Veterinaria
+                {editingSession ? 'Editar Visita Veterinaria' : 'Nueva Visita Veterinaria'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -403,6 +481,16 @@ const Veterinaria: React.FC = () => {
                       value={veterinarianName}
                       onChange={(e) => setVeterinarianName(e.target.value)}
                       placeholder="Nombre del veterinario"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="veterinaryClinic">Veterinaria/Clínica</Label>
+                    <Input
+                      id="veterinaryClinic"
+                      value={veterinaryClinic}
+                      onChange={(e) => setVeterinaryClinic(e.target.value)}
+                      placeholder="Nombre de la veterinaria o clínica"
                     />
                   </div>
 
@@ -474,7 +562,7 @@ const Veterinaria: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="pdfFile">Subir Documento PDF</Label>
+                  <Label htmlFor="pdfFile">Subir Documento PDF (Resultados)</Label>
                   <Input
                     id="pdfFile"
                     type="file"
@@ -482,16 +570,52 @@ const Veterinaria: React.FC = () => {
                     onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
                     className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
                   />
+                  {editingSession?.pdf_url && !pdfFile && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Documento actual: <a href={editingSession.pdf_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Ver documento</a>
+                    </p>
+                  )}
                 </div>
 
-                <Button 
-                  type="submit" 
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600"
-                >
-                  <Stethoscope className="w-4 h-4 mr-2" />
-                  {loading ? 'Registrando...' : 'Registrar Visita Veterinaria'}
-                </Button>
+                <div>
+                  <Label htmlFor="invoiceFile">Subir Factura (PDF o Imagen)</Label>
+                  <Input
+                    id="invoiceFile"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
+                    className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                  />
+                  {editingSession?.invoice_url && !invoiceFile && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Factura actual: <a href={editingSession.invoice_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Ver factura</a>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600"
+                  >
+                    <Stethoscope className="w-4 h-4 mr-2" />
+                    {loading 
+                      ? (editingSession ? 'Actualizando...' : 'Registrando...') 
+                      : (editingSession ? 'Actualizar Visita' : 'Registrar Visita Veterinaria')
+                    }
+                  </Button>
+                  {editingSession && (
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={resetForm}
+                      disabled={loading}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -729,48 +853,103 @@ const Veterinaria: React.FC = () => {
                   <p className="text-sm">Comienza registrando tu primera visita veterinaria</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {getFilteredVeterinarySessions().map((session) => (
-                    <div key={session.id} className="border-l-4 border-red-500 pl-4 py-3 bg-red-50 rounded-r-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Stethoscope className="w-5 h-5 text-red-600" />
-                          <span className="font-semibold text-gray-800">
-                            {appointmentTypes.find(t => t.value === session.appointment_type)?.label || session.appointment_type}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {session.pet_name}
-                          </Badge>
-                          <Badge className="bg-red-100 text-red-800">
-                            {session.veterinarian_name}
-                          </Badge>
+                    <div key={session.id} className="border-l-4 border-red-500 pl-4 py-4 bg-red-50 rounded-r-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Stethoscope className="w-5 h-5 text-red-600" />
+                            <span className="font-semibold text-gray-800">
+                              {appointmentTypes.find(t => t.value === session.appointment_type)?.label || session.appointment_type}
+                            </span>
+                            <Badge variant="outline" className="text-xs">
+                              {session.pet_name}
+                            </Badge>
+                            <Badge className="bg-red-100 text-red-800">
+                              {session.veterinarian_name}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-500 mb-2">
+                            <Calendar className="w-4 h-4 inline mr-1" />
+                            {new Date(session.date).toLocaleDateString('es-GT', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </div>
                         </div>
-                        <span className="text-sm text-gray-500">
-                          {new Date(session.date).toLocaleDateString('es-GT')}
-                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadSessionForEdit(session)}
+                            className="text-xs"
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => deleteVeterinarySession(session.id)}
+                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
+                            disabled={loading}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Eliminar
+                          </Button>
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Diagnóstico:</span>
-                          <p className="mt-1">{session.diagnosis}</p>
-                        </div>
-                        {session.treatment && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-3">
+                        {session.veterinary_clinic && (
                           <div>
-                            <span className="font-medium">Tratamiento:</span>
-                            <p className="mt-1">{session.treatment}</p>
+                            <span className="font-medium text-gray-700">Veterinaria/Clínica:</span>
+                            <p className="mt-1 text-gray-600">{session.veterinary_clinic}</p>
                           </div>
                         )}
                         {session.cost && (
                           <div>
-                            <span className="font-medium">Costo:</span>
-                            <p className="mt-1">Q{session.cost}</p>
+                            <span className="font-medium text-gray-700">Costo:</span>
+                            <p className="mt-1 text-gray-600">Q{session.cost.toFixed(2)}</p>
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <span className="font-medium text-gray-700">Diagnóstico:</span>
+                          <p className="mt-1 text-gray-600">{session.diagnosis}</p>
+                        </div>
+                        {session.treatment && (
+                          <div className="md:col-span-2">
+                            <span className="font-medium text-gray-700">Tratamiento:</span>
+                            <p className="mt-1 text-gray-600">{session.treatment}</p>
+                          </div>
+                        )}
+                        {session.prescription && (
+                          <div className="md:col-span-2">
+                            <span className="font-medium text-gray-700">Receta Médica:</span>
+                            <p className="mt-1 text-gray-600">{session.prescription}</p>
+                          </div>
+                        )}
+                        {session.follow_up_date && (
+                          <div>
+                            <span className="font-medium text-gray-700">Fecha de Seguimiento:</span>
+                            <p className="mt-1 text-gray-600">
+                              {new Date(session.follow_up_date).toLocaleDateString('es-GT')}
+                            </p>
+                          </div>
+                        )}
+                        {session.notes && (
+                          <div className="md:col-span-2">
+                            <span className="font-medium text-gray-700">Notas:</span>
+                            <p className="mt-1 text-gray-600 italic">"{session.notes}"</p>
                           </div>
                         )}
                       </div>
                       
-                      {session.pdf_url && (
-                        <div className="mt-2">
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {session.pdf_url && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -778,14 +957,21 @@ const Veterinaria: React.FC = () => {
                             className="text-xs"
                           >
                             <FileImage className="w-3 h-3 mr-1" />
-                            Ver Documento
+                            Ver Documento PDF
                           </Button>
-                        </div>
-                      )}
-                      
-                      {session.notes && (
-                        <p className="text-sm text-gray-600 mt-2 italic">"{session.notes}"</p>
-                      )}
+                        )}
+                        {session.invoice_url && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(session.invoice_url, '_blank')}
+                            className="text-xs"
+                          >
+                            <Receipt className="w-3 h-3 mr-1" />
+                            Ver Factura
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Scissors, Home, Moon, Stethoscope, GraduationCap, Star, MapPin, Package, Building2, Clock, Coins, Search, Filter, X } from 'lucide-react';
+import { ShoppingBag, Scissors, Home, Moon, Stethoscope, GraduationCap, Star, MapPin, Package, Building2, Clock, Coins, Search, Filter, X, Image as ImageIcon } from 'lucide-react';
 import PageHeader from './PageHeader';
 import { useNavigation } from '@/contexts/NavigationContext';
 import { useLocation } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/lib/supabase';
@@ -16,7 +17,8 @@ import CartIcon from './CartIcon';
 import CartModal from './CartModal';
 import Checkout from './Checkout';
 import ServiceBookingModal from './ServiceBookingModal';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import { getPricingConfig, hasSizePricing } from '@/config/productPricing';
 
 interface ProviderService {
   id: string;
@@ -24,12 +26,17 @@ interface ProviderService {
   service_category: string;
   description: string;
   detailed_description?: string;
-  price: number;
+  price: number; // Precio general (para retrocompatibilidad)
+  price_small?: number | null;
+  price_medium?: number | null;
+  price_large?: number | null;
+  price_extra_large?: number | null;
   currency: string;
   duration_minutes: number;
   is_active: boolean;
   created_at: string;
   provider_id: string;
+  service_image_url?: string;
   average_rating?: number;
   review_count?: number;
   providers: {
@@ -65,6 +72,11 @@ interface ProviderProduct {
   created_at: string;
   provider_id: string;
   product_image_url?: string;
+  secondary_images?: string[];
+  price_small?: number | null;
+  price_medium?: number | null;
+  price_large?: number | null;
+  price_extra_large?: number | null;
   original_price?: number;
   discount_percentage?: number;
   has_delivery?: boolean;
@@ -191,6 +203,8 @@ const Marketplace: React.FC = () => {
   // Modal states
   const [selectedItem, setSelectedItem] = useState<ProviderService | ProviderProduct | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [selectedSize, setSelectedSize] = useState<'small' | 'medium' | 'large' | 'extra_large' | 'general' | null>(null);
 
   // User location and wishlist states
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -202,7 +216,7 @@ const Marketplace: React.FC = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showServiceBookingModal, setShowServiceBookingModal] = useState(false);
   const [selectedService, setSelectedService] = useState<ProviderService | null>(null);
-  const { toast } = useToast();
+  const [productQuantity, setProductQuantity] = useState<{ [key: string]: number }>({});
 
   // Get user location on component mount
   useEffect(() => {
@@ -305,44 +319,62 @@ const Marketplace: React.FC = () => {
   };
 
   // Handle add to cart
-  const handleAddToCart = (product: ProviderProduct) => {
-    // Debug: Log the product data
-    console.log('Adding product to cart:', {
-      id: product.id,
-      provider_id: product.provider_id,
-      provider_user_id: product.providers?.user_id,
-      name: product.product_name,
-      price: product.price
-    });
+  const handleAddToCart = (product: ProviderProduct, quantity?: number) => {
+    // Validate size is selected if product has size-based pricing
+    const pricingConfig = getPricingConfig(product.product_category);
+    if (pricingConfig.system !== 'single' && !selectedSize) {
+      toast.error("⚠️ Selecciona un tamaño. Por favor selecciona un tamaño antes de agregar al carrito");
+      return;
+    }
 
     // Validate provider_id exists
     if (!product.provider_id) {
-      toast({
-        title: "❌ Error",
-        description: "Producto sin proveedor válido",
-        variant: "destructive",
-        duration: 3000,
-      });
+      toast.error("❌ Error: Producto sin proveedor válido");
       return;
     }
 
     // Use the provider's user_id (auth.users.id) instead of provider_id (providers.id)
     const providerUserId = product.providers?.user_id;
     if (!providerUserId) {
-      toast({
-        title: "❌ Error",
-        description: "No se pudo identificar el usuario del proveedor",
-        variant: "destructive",
-        duration: 3000,
-      });
+      toast.error("❌ Error: No se pudo identificar el usuario del proveedor");
       return;
     }
 
+    // Get quantity from state or use provided quantity or default to 1
+    const qty = quantity || productQuantity[product.id] || 1;
+    
+    // Validate quantity doesn't exceed stock
+    if (qty > product.stock_quantity) {
+      toast.error(`❌ Error: Solo hay ${product.stock_quantity} unidades disponibles`);
+      return;
+    }
+
+    // Calculate price based on selected size
+    let finalPrice = product.price;
+    let sizeLabel = '';
+    
+    if (selectedSize && selectedSize !== 'general') {
+      const sizePrice = (product as any)[`price_${selectedSize}`];
+      if (sizePrice) {
+        finalPrice = sizePrice;
+        // Get size label from config
+        const sizeOption = pricingConfig.sizeOptions?.find(s => s.key === selectedSize);
+        if (sizeOption) {
+          sizeLabel = ` - ${sizeOption.label}`;
+        }
+      }
+    }
+
+    // Create unique ID that includes size to allow multiple sizes of same product in cart
+    const itemId = selectedSize && selectedSize !== 'general' 
+      ? `${product.id}_${selectedSize}` 
+      : product.id;
+
     addItem({
-      id: product.id,
+      id: itemId,
       type: 'product',
-      name: product.product_name,
-      price: product.price,
+      name: product.product_name + sizeLabel,
+      price: finalPrice,
       currency: product.currency,
       provider_id: providerUserId, // Use user_id from providers table
       provider_name: product.providers.business_name,
@@ -351,14 +383,13 @@ const Marketplace: React.FC = () => {
       delivery_fee: product.providers.delivery_fee,
       has_delivery: product.providers.has_delivery,
       has_pickup: product.providers.has_pickup,
-    });
+      product_size: selectedSize || 'general',
+      product_id: product.id, // Store original product ID (without size suffix)
+      product_category: product.product_category, // Store product category for food division logic
+    }, qty);
 
-    toast({
-      title: "✅ Producto Agregado",
-      description: `${product.product_name} ha sido agregado al carrito`,
-      variant: "default",
-      duration: 3000,
-    });
+    const sizeText = sizeLabel ? ` (${sizeLabel.replace(' - ', '')})` : '';
+    toast.success(`✅ Producto Agregado: ${product.product_name}${sizeText} ha sido agregado al carrito`);
   };
 
   // Handle service booking (open booking modal instead of adding to cart)
@@ -380,24 +411,14 @@ const Marketplace: React.FC = () => {
 
     // Validate provider_id exists
     if (!service.provider_id) {
-      toast({
-        title: "❌ Error",
-        description: "Servicio sin proveedor válido",
-        variant: "destructive",
-        duration: 3000,
-      });
+      toast.error("❌ Error: Servicio sin proveedor válido");
       return;
     }
 
     // Use the provider's user_id (auth.users.id) instead of provider_id (providers.id)
     const providerUserId = service.providers?.user_id;
     if (!providerUserId) {
-      toast({
-        title: "❌ Error",
-        description: "No se pudo identificar el usuario del proveedor",
-        variant: "destructive",
-        duration: 3000,
-      });
+      toast.error("❌ Error: No se pudo identificar el usuario del proveedor");
       return;
     }
 
@@ -409,19 +430,14 @@ const Marketplace: React.FC = () => {
       currency: service.currency,
       provider_id: providerUserId, // Use user_id from providers table
       provider_name: service.providers.business_name,
-      image_url: undefined, // Services typically don't have images
+      image_url: service.service_image_url || undefined,
       description: service.description,
       delivery_fee: service.providers.delivery_fee,
       has_delivery: service.providers.has_delivery,
       has_pickup: service.providers.has_pickup,
     });
 
-    toast({
-      title: "✅ Servicio Agregado",
-      description: `${service.service_name} ha sido agregado al carrito`,
-      variant: "default",
-      duration: 3000,
-    });
+    toast.success(`✅ Servicio Agregado: ${service.service_name} ha sido agregado al carrito`);
   };
 
   // Handle cart modal
@@ -453,12 +469,7 @@ const Marketplace: React.FC = () => {
 
   const handleCheckoutSuccess = () => {
     setShowCheckout(false);
-    toast({
-      title: "🎉 ¡Orden Completada!",
-      description: "Tu orden ha sido procesada exitosamente",
-      variant: "default",
-      duration: 5000,
-    });
+    toast.success("🎉 ¡Compra Completada! Tu orden ha sido procesada exitosamente. Recibirás una confirmación por correo electrónico.");
   };
 
   // Fetch real services and products from database
@@ -577,12 +588,22 @@ const Marketplace: React.FC = () => {
         }
 
         // Debug: Log the fetched products data
-        console.log('Fetched products data:', productsData?.map(p => ({
+        console.log('=== MARKETPLACE DEBUG ===');
+        console.log('Total products fetched:', productsData?.length || 0);
+        console.log('Total services fetched:', servicesData?.length || 0);
+        console.log('Products data:', productsData?.map(p => ({
           id: p.id,
           provider_id: p.provider_id,
           name: p.product_name,
-          full_product: p
+          provider_name: p.providers?.business_name
         })));
+        console.log('Services data:', servicesData?.map(s => ({
+          id: s.id,
+          provider_id: s.provider_id,
+          name: s.service_name,
+          provider_name: s.providers?.business_name
+        })));
+        console.log('=== END MARKETPLACE DEBUG ===');
 
         // Calculate average ratings for products
         const productsWithRatings = (productsData || []).map(product => {
@@ -695,12 +716,35 @@ const Marketplace: React.FC = () => {
   const handleShowDetails = (item: ProviderService | ProviderProduct) => {
     setSelectedItem(item);
     setShowDetailsModal(true);
+    setSelectedImageIndex(0); // Reset to first image when opening
+    // Reset size selection when opening modal
+    if ('product_image_url' in item) {
+      const product = item as ProviderProduct;
+      // Auto-select first available size, or general price if no sizes
+      if (product.price_small) {
+        setSelectedSize('small');
+      } else if (product.price_medium) {
+        setSelectedSize('medium');
+      } else if (product.price_large) {
+        setSelectedSize('large');
+      } else if (product.price_extra_large) {
+        setSelectedSize('extra_large');
+      } else if (product.price && product.price > 0) {
+        setSelectedSize('general');
+      } else {
+        setSelectedSize(null);
+      }
+    } else {
+      setSelectedSize(null);
+    }
   };
 
   // Close details modal
   const handleCloseDetails = () => {
     setSelectedItem(null);
     setShowDetailsModal(false);
+    setSelectedImageIndex(0); // Reset image index when closing
+    setSelectedSize(null); // Reset size selection when closing
   };
 
   // Format price
@@ -711,7 +755,7 @@ const Marketplace: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 pb-40 md:pb-6">
         <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 text-white">
           <h2 className="text-2xl font-bold mb-2">Marketplace</h2>
           <p className="text-purple-100">Cargando productos y servicios...</p>
@@ -725,7 +769,7 @@ const Marketplace: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 pb-40 md:pb-6">
         <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 text-white">
           <h2 className="text-2xl font-bold mb-2">Marketplace</h2>
           <p className="text-purple-100">Error al cargar el marketplace</p>
@@ -738,15 +782,12 @@ const Marketplace: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       {/* Header */}
       <PageHeader 
         title="Marketplace"
         subtitle="Encuentra servicios y productos para tu mascota"
         gradient="from-blue-500 to-cyan-500"
-        showHamburgerMenu={true}
-        onToggleHamburger={toggleMobileMenu}
-        isHamburgerOpen={isMobileMenuOpen}
       >
         <CartIcon onOpenCart={handleOpenCart} />
       </PageHeader>
@@ -975,6 +1016,16 @@ const Marketplace: React.FC = () => {
                 const CategoryIcon = getCategoryIcon(service.service_category);
                 return (
                   <Card key={service.id} className="overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                    {/* Service Image */}
+                    {service.service_image_url && (
+                      <div className="relative w-full h-48 overflow-hidden">
+                        <img
+                          src={service.service_image_url}
+                          alt={service.service_name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                     <CardHeader className="pb-2 pt-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -1011,7 +1062,34 @@ const Marketplace: React.FC = () => {
 
                       <div className="flex items-center justify-between">
                         <span className="text-xl font-bold text-purple-600">
-                          {formatPrice(service.price, service.currency)}
+                          {(() => {
+                            // Check if service has size-based pricing
+                            const hasSizePrices = service.price_small || service.price_medium || 
+                                                  service.price_large || service.price_extra_large;
+                            
+                            if (hasSizePrices) {
+                              const sizePrices = [
+                                service.price_small,
+                                service.price_medium,
+                                service.price_large,
+                                service.price_extra_large
+                              ].filter((p): p is number => p !== null && p !== undefined);
+                              
+                              if (sizePrices.length > 0) {
+                                const minPrice = Math.min(...sizePrices);
+                                const maxPrice = Math.max(...sizePrices);
+                                
+                                if (minPrice === maxPrice) {
+                                  return formatPrice(minPrice, service.currency);
+                                } else {
+                                  return `${formatPrice(minPrice, service.currency)} - ${formatPrice(maxPrice, service.currency)}`;
+                                }
+                              }
+                            }
+                            
+                            // Fallback to general price
+                            return formatPrice(service.price, service.currency);
+                          })()}
                         </span>
                         <Button 
                           className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600" 
@@ -1244,17 +1322,36 @@ const Marketplace: React.FC = () => {
                   <Card key={product.id} className="overflow-hidden hover:shadow-xl transition-shadow duration-300">
                     {/* Product Image */}
                     <div className="relative h-48 overflow-hidden bg-gray-100">
-                      {product.product_image_url ? (
-                        <img
-                          src={product.product_image_url}
-                          alt={product.product_name}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="w-12 h-12 text-gray-300" />
-                        </div>
-                      )}
+                      {(() => {
+                        const allImages = [
+                          product.product_image_url,
+                          ...(product.secondary_images || [])
+                        ].filter(Boolean) as string[];
+                        
+                        if (allImages.length === 0) {
+                          return (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-12 h-12 text-gray-300" />
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <div className="relative w-full h-full">
+                            <img
+                              src={allImages[0]}
+                              alt={product.product_name}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                            />
+                            {allImages.length > 1 && (
+                              <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                <ImageIcon className="w-3 h-3" />
+                                {allImages.length}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       
                       {/* Category Badge Overlay */}
                       <div className="absolute top-2 left-2">
@@ -1375,39 +1472,214 @@ const Marketplace: React.FC = () => {
                       {/* Price Section */}
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          {product.discount_percentage && product.discount_percentage > 0 && product.original_price ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl font-bold text-purple-600">
-                                {formatPrice(product.price, product.currency)}
-                              </span>
-                              <span className="text-sm text-gray-500 line-through">
-                                {formatPrice(product.original_price, product.currency)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xl font-bold text-purple-600">
-                              {formatPrice(product.price, product.currency)}
-                            </span>
-                          )}
+                          {(() => {
+                            const pricingConfig = getPricingConfig(product.product_category);
+                            
+                            // Always check if product has size-based pricing, regardless of category config
+                            // This allows products to have size prices even if category is set to 'single'
+                            const hasDogSizePrices = product.price_small || 
+                              product.price_medium || 
+                              product.price_large || 
+                              product.price_extra_large;
+                            
+                            const hasClothingSizePrices = (product as any).price_xs ||
+                              (product as any).price_s ||
+                              (product as any).price_m ||
+                              (product as any).price_l ||
+                              (product as any).price_xl ||
+                              (product as any).price_xxl;
+                            
+                            const hasSizePrices = hasDogSizePrices || hasClothingSizePrices;
+                            
+                            if (hasSizePrices) {
+                              // Collect all available size prices (only valid numbers)
+                              const sizePrices: number[] = [];
+                              
+                              // Always check for dog size prices (only if they're valid numbers)
+                              if (product.price_small != null && !isNaN(Number(product.price_small)) && product.price_small > 0) {
+                                sizePrices.push(Number(product.price_small));
+                              }
+                              if (product.price_medium != null && !isNaN(Number(product.price_medium)) && product.price_medium > 0) {
+                                sizePrices.push(Number(product.price_medium));
+                              }
+                              if (product.price_large != null && !isNaN(Number(product.price_large)) && product.price_large > 0) {
+                                sizePrices.push(Number(product.price_large));
+                              }
+                              if (product.price_extra_large != null && !isNaN(Number(product.price_extra_large)) && product.price_extra_large > 0) {
+                                sizePrices.push(Number(product.price_extra_large));
+                              }
+                              
+                              // Always check for clothing size prices (only if they're valid numbers)
+                              const clothingPrices = ['price_xs', 'price_s', 'price_m', 'price_l', 'price_xl', 'price_xxl'];
+                              clothingPrices.forEach(priceKey => {
+                                const price = (product as any)[priceKey];
+                                if (price != null && !isNaN(Number(price)) && price > 0) {
+                                  sizePrices.push(Number(price));
+                                }
+                              });
+                              
+                              // Don't include general price in the range if we have size-specific prices
+                              // Only include it if it's different from the size prices
+                              
+                              // Debug log
+                              console.log('Product:', product.product_name, 'Category:', product.product_category);
+                              console.log('Has size prices:', hasSizePrices);
+                              console.log('Size prices array:', sizePrices);
+                              console.log('Product price fields:', {
+                                price_small: product.price_small,
+                                price_medium: product.price_medium,
+                                price_large: product.price_large,
+                                price_extra_large: product.price_extra_large,
+                                price_xs: (product as any).price_xs,
+                                price_s: (product as any).price_s,
+                                price_m: (product as any).price_m,
+                                price_l: (product as any).price_l,
+                                price_xl: (product as any).price_xl,
+                                price_xxl: (product as any).price_xxl
+                              });
+                              
+                              if (sizePrices.length > 0) {
+                                const minPrice = Math.min(...sizePrices);
+                                const maxPrice = Math.max(...sizePrices);
+                                
+                                console.log('Calculated price range:', { minPrice, maxPrice });
+                                
+                                if (product.discount_percentage && product.discount_percentage > 0 && product.original_price) {
+                                  return (
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex flex-col">
+                                        <span className="text-xl font-bold text-purple-600">
+                                          {minPrice === maxPrice 
+                                            ? formatPrice(minPrice, product.currency)
+                                            : `${formatPrice(minPrice, product.currency)} - ${formatPrice(maxPrice, product.currency)}`
+                                          }
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {minPrice === maxPrice ? 'Precio único' : 'Rango de precios'}
+                                        </span>
+                                      </div>
+                                      <span className="text-sm text-gray-500 line-through">
+                                        {formatPrice(product.original_price, product.currency)}
+                                      </span>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="flex flex-col">
+                                      <span className="text-xl font-bold text-purple-600">
+                                        {minPrice === maxPrice 
+                                          ? formatPrice(minPrice, product.currency)
+                                          : `${formatPrice(minPrice, product.currency)} - ${formatPrice(maxPrice, product.currency)}`
+                                        }
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {minPrice === maxPrice ? 'Precio único' : 'Rango de precios por tamaño'}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                              }
+                            }
+                            
+                            // Fallback to general price display
+                            if (product.discount_percentage && product.discount_percentage > 0 && product.original_price) {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl font-bold text-purple-600">
+                                    {formatPrice(product.price, product.currency)}
+                                  </span>
+                                  <span className="text-sm text-gray-500 line-through">
+                                    {formatPrice(product.original_price, product.currency)}
+                                  </span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <span className="text-xl font-bold text-purple-600">
+                                  {formatPrice(product.price, product.currency)}
+                                </span>
+                              );
+                            }
+                          })()}
                         </div>
                       </div>
                       
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                          size="sm"
-                          onClick={() => handleAddToCart(product)}
-                        >
-                          Comprar
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="flex-1" 
-                          size="sm"
-                          onClick={() => handleShowDetails(product)}
-                        >
-                          Ver Detalles
-                        </Button>
+                      <div className="space-y-2">
+                        {product.stock_quantity > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`quantity-${product.id}`} className="text-xs text-gray-600 whitespace-nowrap">Cantidad:</Label>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => {
+                                  const currentQty = productQuantity[product.id] || 1;
+                                  if (currentQty > 1) {
+                                    setProductQuantity(prev => ({ ...prev, [product.id]: currentQty - 1 }));
+                                  }
+                                }}
+                                disabled={(productQuantity[product.id] || 1) <= 1}
+                              >
+                                -
+                              </Button>
+                              <Input
+                                id={`quantity-${product.id}`}
+                                type="number"
+                                min="1"
+                                max={product.stock_quantity}
+                                value={productQuantity[product.id] || 1}
+                                onChange={(e) => {
+                                  const qty = Math.max(1, Math.min(product.stock_quantity, parseInt(e.target.value) || 1));
+                                  setProductQuantity(prev => ({ ...prev, [product.id]: qty }));
+                                }}
+                                className="w-12 h-7 text-center text-xs p-1"
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => {
+                                  const currentQty = productQuantity[product.id] || 1;
+                                  if (currentQty < product.stock_quantity) {
+                                    setProductQuantity(prev => ({ ...prev, [product.id]: currentQty + 1 }));
+                                  }
+                                }}
+                                disabled={(productQuantity[product.id] || 1) >= product.stock_quantity}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                            size="sm"
+                            disabled={product.stock_quantity === 0}
+                            onClick={() => {
+                              // If product has size-based pricing, open details modal instead
+                              const hasSizeOptions = product.price_small || product.price_medium || product.price_large || product.price_extra_large;
+                              if (hasSizeOptions) {
+                                handleShowDetails(product);
+                              } else {
+                                // If no size options, add directly to cart
+                                const qty = productQuantity[product.id] || 1;
+                                handleAddToCart(product, qty);
+                              }
+                            }}
+                          >
+                            {product.stock_quantity === 0 ? 'Sin Stock' : 'Comprar'}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            className="flex-1" 
+                            size="sm"
+                            onClick={() => handleShowDetails(product)}
+                          >
+                            Ver Detalles
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1437,13 +1709,94 @@ const Marketplace: React.FC = () => {
                 </Button>
               </div>
 
-              {/* Item Image (for products) */}
-              {('product_image_url' in selectedItem) && selectedItem.product_image_url && (
+              {/* Item Image Gallery (for products) */}
+              {('product_image_url' in selectedItem) && (
+                <div className="mb-3">
+                  {(() => {
+                    const product = selectedItem as ProviderProduct;
+                    const allImages = [
+                      product.product_image_url,
+                      ...(product.secondary_images || [])
+                    ].filter(Boolean) as string[];
+                    
+                    if (allImages.length === 0) return null;
+                    
+                    return (
+                      <div className="space-y-2">
+                        {/* Main Image */}
+                        <div className="relative">
+                          <img
+                            src={allImages[selectedImageIndex]}
+                            alt={product.product_name}
+                            className="w-full h-64 object-cover rounded-lg"
+                          />
+                          {allImages.length > 1 && (
+                            <>
+                              {/* Previous Button */}
+                              {selectedImageIndex > 0 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white"
+                                  onClick={() => setSelectedImageIndex(selectedImageIndex - 1)}
+                                >
+                                  ←
+                                </Button>
+                              )}
+                              {/* Next Button */}
+                              {selectedImageIndex < allImages.length - 1 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white"
+                                  onClick={() => setSelectedImageIndex(selectedImageIndex + 1)}
+                                >
+                                  →
+                                </Button>
+                              )}
+                              {/* Image Counter */}
+                              <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                                {selectedImageIndex + 1} / {allImages.length}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        
+                        {/* Thumbnail Gallery */}
+                        {allImages.length > 1 && (
+                          <div className="flex gap-2 overflow-x-auto pb-2">
+                            {allImages.map((img, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setSelectedImageIndex(idx)}
+                                className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                  selectedImageIndex === idx
+                                    ? 'border-emerald-500 ring-2 ring-emerald-200'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <img
+                                  src={img}
+                                  alt={`${product.product_name} ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Service Image (for services) */}
+              {('service_name' in selectedItem) && (selectedItem as ProviderService).service_image_url && (
                 <div className="mb-3">
                   <img
-                    src={selectedItem.product_image_url}
-                    alt={selectedItem.product_name}
-                    className="w-full h-40 object-cover rounded-lg"
+                    src={(selectedItem as ProviderService).service_image_url}
+                    alt={(selectedItem as ProviderService).service_name}
+                    className="w-full h-64 object-cover rounded-lg"
                   />
                 </div>
               )}
@@ -1506,38 +1859,236 @@ const Marketplace: React.FC = () => {
                   </div>
                 ) : (
                   // Product details
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-1">Detalles del Producto</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 p-2 rounded-lg">
-                        <span className="text-xs text-gray-500">Categoría</span>
-                        <p className="font-medium text-sm capitalize">{selectedItem.product_category}</p>
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-1">Detalles del Producto</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 p-2 rounded-lg">
+                          <span className="text-xs text-gray-500">Categoría</span>
+                          <p className="font-medium text-sm capitalize">{selectedItem.product_category}</p>
+                        </div>
+                        {selectedItem.brand && (
+                          <div className="bg-gray-50 p-2 rounded-lg">
+                            <span className="text-xs text-gray-500">Marca</span>
+                            <p className="font-medium text-sm">{selectedItem.brand}</p>
+                          </div>
+                        )}
+                        {selectedItem.weight_kg && (
+                          <div className="bg-gray-50 p-2 rounded-lg">
+                            <span className="text-xs text-gray-500">Peso</span>
+                            <p className="font-medium text-sm">{selectedItem.weight_kg} kg</p>
+                          </div>
+                        )}
                       </div>
-                      {selectedItem.brand && (
-                        <div className="bg-gray-50 p-2 rounded-lg">
-                          <span className="text-xs text-gray-500">Marca</span>
-                          <p className="font-medium text-sm">{selectedItem.brand}</p>
-                        </div>
-                      )}
-                      {selectedItem.weight_kg && (
-                        <div className="bg-gray-50 p-2 rounded-lg">
-                          <span className="text-xs text-gray-500">Peso</span>
-                          <p className="font-medium text-sm">{selectedItem.weight_kg} kg</p>
-                        </div>
-                      )}
                     </div>
+
+                    {/* Selector de Tamaño */}
+                    {(() => {
+                      const product = selectedItem as ProviderProduct;
+                      const pricingConfig = getPricingConfig(product.product_category);
+                      
+                      // Build size options based on pricing system
+                      let sizeOptions: Array<{ key: string; label: string; description?: string; price?: number | null }> = [];
+                      
+                      if (pricingConfig.system === 'dog_size') {
+                        sizeOptions = pricingConfig.sizeOptions?.map(size => ({
+                          key: size.key,
+                          label: size.label,
+                          description: size.description,
+                          price: (product as any)[`price_${size.key}`]
+                        })) || [];
+                      } else if (pricingConfig.system === 'clothing_size') {
+                        sizeOptions = pricingConfig.sizeOptions?.map(size => ({
+                          key: size.key,
+                          label: size.label,
+                          description: size.description,
+                          price: (product as any)[`price_${size.key}`]
+                        })) || [];
+                      }
+
+                      // Filter out options without prices
+                      const availableSizeOptions = sizeOptions.filter(p => p.price !== null && p.price !== undefined);
+                      const hasSizeOptions = availableSizeOptions.length > 0;
+                      const hasGeneralPrice = product.price && product.price > 0;
+
+                      if (pricingConfig.system === 'single') {
+                        // Single price system - no size selector needed
+                        return null;
+                      }
+
+                      if (!hasSizeOptions && !hasGeneralPrice) return null;
+
+                      return (
+                        <div>
+                          <h4 className="font-semibold text-gray-700 mb-3">Selecciona el Tamaño *</h4>
+                          {hasSizeOptions && (
+                            <div className={`grid gap-3 mb-3 ${
+                              pricingConfig.system === 'clothing_size' 
+                                ? 'grid-cols-2 md:grid-cols-3' 
+                                : 'grid-cols-2'
+                            }`}>
+                              {availableSizeOptions.map((size) => (
+                                <button
+                                  key={size.key}
+                                  onClick={() => setSelectedSize(size.key as 'small' | 'medium' | 'large' | 'extra_large' | 'general')}
+                                  className={`p-3 rounded-lg border-2 transition-all text-left ${
+                                    selectedSize === size.key
+                                      ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                                      : 'border-gray-200 hover:border-purple-300 bg-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className={`text-sm font-medium ${selectedSize === size.key ? 'text-purple-700' : 'text-gray-700'}`}>
+                                      {pricingConfig.system === 'clothing_size' ? `Talla ${size.label}` : size.label}
+                                    </span>
+                                    {selectedSize === size.key && (
+                                      <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                                        <span className="text-white text-xs">✓</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {size.description && (
+                                    <span className="text-xs text-gray-500 block mb-1">{size.description}</span>
+                                  )}
+                                  <p className={`text-lg font-bold ${selectedSize === size.key ? 'text-purple-600' : 'text-gray-600'}`}>
+                                    {selectedItem.currency === 'GTQ' ? 'Q.' : '$'}
+                                    {size.price?.toFixed(2)}
+                                  </p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {hasGeneralPrice && (
+                            <button
+                              onClick={() => setSelectedSize('general')}
+                              className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
+                                selectedSize === 'general'
+                                  ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                                  : 'border-gray-200 hover:border-purple-300 bg-white'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className={`text-sm font-medium block ${selectedSize === 'general' ? 'text-purple-700' : 'text-gray-700'}`}>
+                                    Precio General
+                                  </span>
+                                  <span className="text-xs text-gray-500">Sin diferenciación por tamaño</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className={`text-lg font-bold ${selectedSize === 'general' ? 'text-purple-600' : 'text-gray-600'}`}>
+                                    {selectedItem.currency === 'GTQ' ? 'Q.' : '$'}
+                                    {product.price.toFixed(2)}
+                                  </p>
+                                  {selectedSize === 'general' && (
+                                    <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                                      <span className="text-white text-xs">✓</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
                 {/* Price and Action */}
                 <div className="border-t pt-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm text-gray-500">Precio</span>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {formatPrice(selectedItem.price, selectedItem.currency)}
-                      </p>
-                    </div>
+                  <div className="space-y-3">
+                    {(() => {
+                      if ('service_name' in selectedItem) {
+                        return (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm text-gray-500">Precio</span>
+                              <p className="text-2xl font-bold text-purple-600">
+                                {formatPrice(selectedItem.price, selectedItem.currency)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const product = selectedItem as ProviderProduct;
+                      const pricingConfig = getPricingConfig(product.product_category);
+                      let displayPrice = product.price;
+                      let sizeLabel = '';
+
+                      if (selectedSize && selectedSize !== 'general') {
+                        const sizePrice = (product as any)[`price_${selectedSize}`];
+                        if (sizePrice) {
+                          displayPrice = sizePrice;
+                          const sizeOption = pricingConfig.sizeOptions?.find(s => s.key === selectedSize);
+                          if (sizeOption) {
+                            sizeLabel = ` (${sizeOption.label})`;
+                          }
+                        }
+                      } else if (selectedSize === 'general' && product.price) {
+                        displayPrice = product.price;
+                        sizeLabel = '';
+                      }
+
+                      return (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-sm text-gray-500">Precio{sizeLabel}</span>
+                            <p className="text-2xl font-bold text-purple-600">
+                              {formatPrice(displayPrice, selectedItem.currency)}
+                            </p>
+                            {!selectedSize && (
+                              <p className="text-xs text-red-500 mt-1">Por favor selecciona un tamaño</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {!('service_name' in selectedItem) && selectedItem.stock_quantity > 0 && (
+                      <div className="flex items-center gap-3">
+                        <Label htmlFor="quantity-modal" className="text-sm font-medium">Cantidad:</Label>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const currentQty = productQuantity[selectedItem.id] || 1;
+                              if (currentQty > 1) {
+                                setProductQuantity(prev => ({ ...prev, [selectedItem.id]: currentQty - 1 }));
+                              }
+                            }}
+                            disabled={(productQuantity[selectedItem.id] || 1) <= 1}
+                          >
+                            -
+                          </Button>
+                          <Input
+                            id="quantity-modal"
+                            type="number"
+                            min="1"
+                            max={selectedItem.stock_quantity}
+                            value={productQuantity[selectedItem.id] || 1}
+                            onChange={(e) => {
+                              const qty = Math.max(1, Math.min(selectedItem.stock_quantity, parseInt(e.target.value) || 1));
+                              setProductQuantity(prev => ({ ...prev, [selectedItem.id]: qty }));
+                            }}
+                            className="w-20 text-center"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const currentQty = productQuantity[selectedItem.id] || 1;
+                              if (currentQty < selectedItem.stock_quantity) {
+                                setProductQuantity(prev => ({ ...prev, [selectedItem.id]: currentQty + 1 }));
+                              }
+                            }}
+                            disabled={(productQuantity[selectedItem.id] || 1) >= selectedItem.stock_quantity}
+                          >
+                            +
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       {('service_name' in selectedItem) ? (
                         <Button 
@@ -1553,14 +2104,19 @@ const Marketplace: React.FC = () => {
                       ) : (
                         <Button 
                           className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                          disabled={selectedItem.stock_quantity === 0}
+                          disabled={selectedItem.stock_quantity === 0 || !selectedSize}
                           size="sm"
                           onClick={() => {
-                            handleAddToCart(selectedItem);
+                            if (!selectedSize) {
+                              toast.error("⚠️ Selecciona un tamaño. Por favor selecciona un tamaño antes de comprar");
+                              return;
+                            }
+                            const qty = productQuantity[selectedItem.id] || 1;
+                            handleAddToCart(selectedItem, qty);
                             setShowDetailsModal(false);
                           }}
                         >
-                          {selectedItem.stock_quantity === 0 ? 'Sin Stock' : 'Comprar Ahora'}
+                          {selectedItem.stock_quantity === 0 ? 'Sin Stock' : !selectedSize ? 'Selecciona un tamaño' : 'Comprar Ahora'}
                         </Button>
                       )}
                     </div>
@@ -1596,12 +2152,7 @@ const Marketplace: React.FC = () => {
         service={selectedService}
         onBookingSuccess={() => {
           // Refresh marketplace data or show success message
-          toast({
-            title: "✅ Reserva Confirmada",
-            description: "Tu reserva ha sido creada exitosamente",
-            variant: "default",
-            duration: 4000,
-          });
+          toast.success("✅ Reserva Confirmada: Tu reserva ha sido creada exitosamente");
         }}
       />
     </div>

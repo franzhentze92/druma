@@ -35,6 +35,8 @@ const Navigation: React.FC = () => {
   const [expandedButton, setExpandedButton] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
+  console.log('Navigation: Component rendered, location.pathname:', location.pathname);
+
   // Close expanded menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -86,6 +88,7 @@ const Navigation: React.FC = () => {
 
   // Simplified navigation items for bottom menu (mobile-first game-like navigation)
   const bottomNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'from-blue-500 to-purple-600', path: '/dashboard' },
     { id: 'shop', label: 'Tienda', icon: ShoppingBag, color: 'from-orange-500 to-red-600', expandable: true },
     { id: 'care', label: 'Cuidado', icon: Heart, color: 'from-pink-500 to-purple-600', expandable: true },
     { id: 'adopcion', label: 'Adopción', icon: Users, color: 'from-green-500 to-emerald-600', path: '/adopcion' },
@@ -112,7 +115,7 @@ const Navigation: React.FC = () => {
                 <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-2 rounded-xl">
                   <PawPrint size={20} className="text-white" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-800">Druma</h2>
+                <h2 className="text-xl font-bold text-gray-800">PetHub</h2>
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -155,9 +158,13 @@ const Navigation: React.FC = () => {
         </div>
       )}
 
-      {/* Mobile Bottom Navigation - Simplified Layout */}
-      <div ref={navRef} className="block md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-2xl">
-        <div className="flex justify-around items-center py-2 px-1">
+      {/* Mobile Bottom Navigation - Simplified Layout - Always Fixed */}
+      <div 
+        ref={navRef} 
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-2xl md:block"
+        style={{ height: '80px', boxSizing: 'border-box' }}
+      >
+        <div className="flex justify-around items-center h-full py-2 px-1">
           {/* Navigation items */}
           {bottomNavItems.map((item) => (
             <div key={item.id} className="relative flex-1">
@@ -173,7 +180,7 @@ const Navigation: React.FC = () => {
                 }}
                 className={`
                   w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0
-                  ${(location.pathname === item.path || (item.id === 'shop' && location.pathname.startsWith('/marketplace')))
+                  ${(location.pathname === item.path || (item.id === 'shop' && location.pathname.startsWith('/marketplace')) || (item.id === 'dashboard' && location.pathname === '/dashboard'))
                     ? `bg-gradient-to-r ${item.color} text-white shadow-lg transform scale-105` 
                     : 'text-gray-500 hover:text-gray-700'
                   }

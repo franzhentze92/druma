@@ -3,7 +3,8 @@ import {
   Calendar, Heart, Activity, Bell, TrendingUp, Clock, LogOut, 
   Stethoscope, Utensils, ShoppingBag, Package, Users, Settings,
   BarChart3, Target, Award, Zap, MapPin, Star, Plus, ArrowUpRight, 
-  ArrowDownRight, Eye, MessageCircle, ShoppingCart, CreditCard
+  ArrowDownRight, Eye, MessageCircle, ShoppingCart, CreditCard, Search,
+  Tag, Timer, Info, Building2, Coins
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import FeedingNotification from './FeedingNotification';
-import NotificationBell from './NotificationBell';
 import PageHeader from './PageHeader';
 import { supabase } from '@/lib/supabase';
 import '../services/AutoCompleteService'; // Initialize the auto-complete service
@@ -22,7 +22,9 @@ import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { format, subDays, startOfDay, endOfDay } from 'date-fns';
+import { format, subDays, startOfDay, endOfDay, isSameDay, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale/es';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 
 interface Pet {
   id: string;
@@ -110,6 +112,8 @@ const Dashboard: React.FC = () => {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [petActivityData, setPetActivityData] = useState<PetActivityData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   
   useEffect(() => {
     if (user) {
@@ -148,9 +152,81 @@ const Dashboard: React.FC = () => {
         .select('id, is_active')
         .eq('owner_id', user?.id);
 
+      // Load orders count and total spent
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('id, total_amount')
+        .eq('client_id', user?.id);
+
+      // Load breeding matches count
+      const { data: breedingMatchesData } = await supabase
+        .from('breeding_matches')
+        .select('id, status')
+        .or(`owner_id.eq.${user?.id},partner_owner_id.eq.${user?.id}`)
+        .in('status', ['pending', 'accepted']);
+
+      // Load adoption requests count
+      const { data: adoptionRequestsData } = await supabase
+        .from('adoption_requests')
+        .select('id')
+        .eq('user_id', user?.id);
+
+      // Load service appointments
+      const { data: appointmentsData } = await supabase
+        .from('service_appointments')
+        .select(`
+          *,
+          provider_services (
+            service_name,
+            service_category,
+            description,
+            detailed_description,
+            price,
+            currency,
+            duration_minutes,
+            preparation_instructions,
+            cancellation_policy,
+            providers (
+              business_name,
+              address,
+              phone
+            )
+          ),
+          provider_service_time_slots:provider_service_time_slots!service_appointments_time_slot_id_fkey (
+            slot_start_time,
+            slot_end_time
+          )
+        `)
+        .eq('client_id', user?.id)
+        .order('appointment_date', { ascending: true });
+      
+      const processedAppointments = (appointmentsData || []).map(apt => {
+        // Get time slot information
+        const timeSlot = apt.provider_service_time_slots;
+        let appointmentTime = '';
+        if (timeSlot?.slot_start_time && timeSlot?.slot_end_time) {
+          appointmentTime = `${timeSlot.slot_start_time.substring(0, 5)} - ${timeSlot.slot_end_time.substring(0, 5)}`;
+        } else if (apt.appointment_time) {
+          appointmentTime = apt.appointment_time;
+        } else if (apt.appointment_date) {
+          // Fallback to appointment_date if time slot not available
+          appointmentTime = format(parseISO(apt.appointment_date), 'HH:mm');
+        }
+        
+        return {
+          ...apt,
+          appointment_time: appointmentTime
+        };
+      });
+      
+      setAppointments(processedAppointments);
+
       const exerciseSessions = exerciseData || [];
       const veterinaryVisits = vetData || [];
       const feedingSchedules = feedingData || [];
+      const orders = ordersData || [];
+      const breedingMatches = breedingMatchesData || [];
+      const adoptionRequests = adoptionRequestsData || [];
 
       const avgExerciseMinutes = exerciseSessions.length > 0 
         ? Math.round(exerciseSessions.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) / exerciseSessions.length)
@@ -190,6 +266,8 @@ const Dashboard: React.FC = () => {
         feeding: Math.floor(Math.random() * 5) + 2
       })) || [];
 
+      const totalSpent = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+
       setStats({
         totalPets: petsData?.length || 0,
         totalExerciseSessions: exerciseSessions.length,
@@ -199,11 +277,11 @@ const Dashboard: React.FC = () => {
         totalCaloriesBurned,
         upcomingAppointments: 0, // TODO: Calculate from appointment dates
         activeFeedingSchedules: feedingSchedules.filter(schedule => schedule.is_active).length,
-        totalOrders: Math.floor(Math.random() * 15) + 5, // Mock data
-        totalSpent: Math.floor(Math.random() * 2000) + 500, // Mock data
+        totalOrders: orders.length,
+        totalSpent: totalSpent,
         totalReminders: Math.floor(Math.random() * 8) + 3, // Mock data
-        activeBreedingMatches: Math.floor(Math.random() * 5) + 1, // Mock data
-        totalAdoptionRequests: Math.floor(Math.random() * 3) + 1 // Mock data
+        activeBreedingMatches: breedingMatches.length,
+        totalAdoptionRequests: adoptionRequests.length
       });
 
       setChartData(last7Days);
@@ -228,15 +306,39 @@ const Dashboard: React.FC = () => {
   };
 
   const platformSections = [
+    // My Pet Journey Section
     {
-      id: 'trazabilidad',
-      title: 'Ejercicio',
-      description: 'Registra y analiza el ejercicio de tus mascotas',
-      icon: Activity,
-      color: 'from-green-500 to-teal-600',
-      stats: `${stats.totalExerciseSessions} sesiones`,
-      action: 'Ver Ejercicio'
+      id: 'pet-journey',
+      title: 'My Pet Journey',
+      description: 'Historial completo de tus mascotas',
+      icon: Calendar,
+      color: 'from-purple-500 to-pink-600',
+      stats: `${pets.length} ${pets.length === 1 ? 'mascota' : 'mascotas'}`,
+      action: 'Ver Historial',
+      path: pets.length === 1 ? `/pet-journey/${pets[0]?.id}` : '/ajustes'
     },
+    // Tienda Section
+    {
+      id: 'marketplace',
+      title: 'Tienda',
+      description: 'Productos y servicios para tus mascotas',
+      icon: ShoppingBag,
+      color: 'from-orange-500 to-red-600',
+      stats: `${stats.totalOrders} órdenes`,
+      action: 'Ver Tienda',
+      path: '/marketplace'
+    },
+    {
+      id: 'orders',
+      title: 'Mis Órdenes',
+      description: 'Gestiona tus compras y servicios',
+      icon: ShoppingCart,
+      color: 'from-purple-500 to-indigo-600',
+      stats: `${stats.totalOrders} órdenes`,
+      action: 'Ver Órdenes',
+      path: '/client-orders'
+    },
+    // Cuidado Section
     {
       id: 'feeding-schedules',
       title: 'Nutrición',
@@ -244,7 +346,18 @@ const Dashboard: React.FC = () => {
       icon: Utensils,
       color: 'from-emerald-500 to-green-600',
       stats: `${stats.activeFeedingSchedules} horarios activos`,
-      action: 'Ver Nutrición'
+      action: 'Ver Nutrición',
+      path: '/feeding-schedules'
+    },
+    {
+      id: 'trazabilidad',
+      title: 'Ejercicio',
+      description: 'Registra y analiza el ejercicio de tus mascotas',
+      icon: Activity,
+      color: 'from-green-500 to-teal-600',
+      stats: `${stats.totalExerciseSessions} sesiones`,
+      action: 'Ver Ejercicio',
+      path: '/trazabilidad'
     },
     {
       id: 'veterinaria',
@@ -253,34 +366,51 @@ const Dashboard: React.FC = () => {
       icon: Stethoscope,
       color: 'from-red-500 to-pink-600',
       stats: `${stats.totalVeterinaryVisits} visitas`,
-      action: 'Ver Veterinaria'
+      action: 'Ver Veterinaria',
+      path: '/veterinaria'
     },
+    // Adopción Section
     {
-      id: 'recordatorios',
-      title: 'Recordatorios',
-      description: 'Gestiona recordatorios para el cuidado de tus mascotas',
-      icon: Bell,
-      color: 'from-purple-500 to-indigo-600',
-      stats: 'Recordatorios activos',
-      action: 'Ver Recordatorios'
+      id: 'adopcion',
+      title: 'Adopción',
+      description: 'Encuentra tu mascota perfecta',
+      icon: Users,
+      color: 'from-green-500 to-emerald-600',
+      stats: `${stats.totalAdoptionRequests} solicitudes`,
+      action: 'Ver Adopción',
+      path: '/adopcion'
     },
+    // Social Section
     {
       id: 'parejas',
       title: 'Parejas',
       description: 'Encuentra la pareja perfecta para tu mascota',
       icon: Heart,
       color: 'from-pink-500 to-purple-600',
-      stats: 'Pet Tinder',
-      action: 'Ver Parejas'
+      stats: `${stats.activeBreedingMatches} matches activos`,
+      action: 'Ver Parejas',
+      path: '/parejas'
     },
     {
-      id: 'marketplace',
-      title: 'Marketplace',
-      description: 'Compras y productos para mascotas',
-      icon: ShoppingBag,
+      id: 'mascotas-perdidas',
+      title: 'Mascotas Perdidas',
+      description: 'Reporta y busca mascotas perdidas',
+      icon: Search,
       color: 'from-orange-500 to-red-600',
-      stats: 'Productos disponibles',
-      action: 'Ver Marketplace'
+      stats: 'Mapa de búsqueda',
+      action: 'Ver Mapa',
+      path: '/mascotas-perdidas'
+    },
+    // Ajustes Section
+    {
+      id: 'ajustes',
+      title: 'Ajustes',
+      description: 'Gestiona tu perfil y configuración',
+      icon: Settings,
+      color: 'from-gray-500 to-slate-600',
+      stats: 'Configuración',
+      action: 'Ver Ajustes',
+      path: '/ajustes'
     }
   ];
 
@@ -297,17 +427,8 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // If user has pets, redirect to PetRoom for gamified experience
-  if (pets && pets.length > 0) {
-    window.location.href = '/pet-room';
-    return null;
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      {/* Feeding Notifications */}
-      <FeedingNotification />
-      
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       {/* Header */}
       <PageHeader 
         title={`¡Bienvenido, ${getUserDisplayName()}!`}
@@ -323,34 +444,11 @@ const Dashboard: React.FC = () => {
               <span className="sm:hidden">{stats.totalPets} mascota{stats.totalPets !== 1 ? 's' : ''}</span>
             </span>
           </div>
-          <div className="flex items-center space-x-2">
-            <Activity className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="text-sm md:text-base">
-              <span className="hidden sm:inline">{stats.totalExerciseSessions} sesiones de ejercicio</span>
-              <span className="sm:hidden">{stats.totalExerciseSessions} ejercicio</span>
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Stethoscope className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="text-sm md:text-base">
-              <span className="hidden sm:inline">{stats.totalVeterinaryVisits} visitas veterinarias</span>
-              <span className="sm:hidden">{stats.totalVeterinaryVisits} veterinario</span>
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center space-x-3">
-          <NotificationBell />
-          <Button 
-            onClick={handleLogout} 
-            variant="outline" 
-            className="bg-white/20 text-white border-white/40 hover:bg-white/30 hover:text-white backdrop-blur-sm"
-          >
-            <LogOut className="w-4 h-4 mr-1 md:mr-2" />
-            <span className="hidden sm:inline">Cerrar Sesión</span>
-            <span className="sm:hidden">Salir</span>
-          </Button>
         </div>
       </PageHeader>
+
+      {/* Feeding Notifications */}
+      <FeedingNotification />
 
       {/* Enhanced KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -414,6 +512,269 @@ const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* My Pet Journey Section - Featured */}
+      {pets.length > 0 && (
+        <Card className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl md:text-2xl">
+                  <Calendar className="w-6 h-6 md:w-7 md:h-7 text-purple-600" />
+                  My Pet Journey
+                </CardTitle>
+                <p className="text-sm md:text-base text-gray-600 mt-1">
+                  Historial completo y trazabilidad de tus mascotas
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pets.map((pet) => (
+                <div
+                  key={pet.id}
+                  onClick={() => navigate(`/pet-journey/${pet.id}`)}
+                  className="bg-white rounded-xl p-4 cursor-pointer hover:shadow-lg transition-all border-2 border-transparent hover:border-purple-300"
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    {pet.image_url ? (
+                      <img
+                        src={pet.image_url}
+                        alt={pet.name}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-purple-200"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white text-xl font-bold">
+                        {pet.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-gray-900 truncate">{pet.name}</h3>
+                      <p className="text-sm text-gray-600 truncate">{pet.breed || pet.species}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
+                    {pet.age && <span>{pet.age} años</span>}
+                    {pet.weight && <span>{pet.weight} kg</span>}
+                  </div>
+                  <Button
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/pet-journey/${pet.id}`);
+                    }}
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Ver Historial Completo
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {pets.length === 0 && (
+              <div className="text-center py-8">
+                <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-600 mb-4">No tienes mascotas registradas</p>
+                <Button
+                  onClick={() => navigate('/ajustes')}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                >
+                  Agregar Mascota
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Appointments Calendar Section */}
+      <Card className="border-0 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100/50">
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <Calendar className="w-6 h-6 text-emerald-700" />
+            </div>
+            <span className="text-gray-800">Mis Citas</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {appointments.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
+              <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center">
+                <Calendar className="w-12 h-12 text-emerald-400" />
+              </div>
+              <p className="text-lg font-medium text-gray-700 mb-2">No tienes citas programadas</p>
+              <p className="text-sm text-gray-500 mb-4">Reserva servicios desde el marketplace</p>
+              <Button
+                onClick={() => navigate('/marketplace/services')}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white"
+              >
+                Ver Servicios Disponibles
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Calendar View */}
+              <div className="lg:col-span-8">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+                  <CalendarComponent
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    locale={es}
+                    className="rounded-lg w-full"
+                    style={{ fontSize: '1rem' }}
+                    classNames={{
+                      months: "flex flex-col space-y-3 w-full",
+                      month: "space-y-3 w-full",
+                      caption: "flex justify-center pt-1 relative items-center mb-4",
+                      caption_label: "text-2xl font-bold text-gray-800",
+                      nav: "space-x-2 flex items-center",
+                      nav_button: "h-9 w-9 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm border border-gray-200",
+                      table: "w-full border-collapse space-y-1",
+                      head_row: "flex mb-2",
+                      head_cell: "text-gray-600 rounded-md w-16 font-bold text-base uppercase tracking-wide",
+                      row: "flex w-full mt-1",
+                      cell: "h-12 w-16 text-center p-0 relative flex items-center justify-center",
+                      day: "h-12 w-16 rounded-lg font-semibold hover:bg-emerald-50 transition-all duration-200 text-base",
+                      day_selected: "bg-gradient-to-br from-emerald-500 to-teal-500 text-white font-bold shadow-lg hover:from-emerald-600 hover:to-teal-600 scale-105 ring-2 ring-emerald-200",
+                      day_today: "bg-emerald-100 text-emerald-700 font-bold border-2 border-emerald-400",
+                      day_outside: "text-gray-400 opacity-50",
+                    }}
+                    modifiers={{
+                      hasAppointments: appointments.map(apt => 
+                        startOfDay(parseISO(apt.appointment_date))
+                      )
+                    }}
+                    modifiersClassNames={{
+                      hasAppointments: "bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-800 font-semibold border border-blue-200 hover:from-blue-200 hover:to-indigo-200"
+                    }}
+                  />
+                </div>
+              </div>
+              
+              {/* Appointments List for Selected Date */}
+              <div className="lg:col-span-4">
+                <div className="sticky top-6">
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 border border-gray-200">
+                    <h3 className="font-bold text-lg text-gray-800 capitalize">
+                      {selectedDate ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: es }) : 'Selecciona una fecha'}
+                    </h3>
+                    {selectedDate && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        {appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length} 
+                        {' '}cita{appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length !== 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                  {selectedDate ? (
+                    <div className="space-y-4 max-h-[650px] overflow-y-auto pr-2 custom-scrollbar">
+                      {appointments
+                        .filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate))
+                        .sort((a, b) => {
+                          const timeA = a.appointment_time || '00:00';
+                          const timeB = b.appointment_time || '00:00';
+                          return timeA.localeCompare(timeB);
+                        })
+                        .map((appointment) => (
+                          <div 
+                            key={appointment.id} 
+                            className="group relative bg-white border-2 border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-lg transition-all duration-300"
+                          >
+                            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            <div className="relative">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                    <h4 className="font-bold text-gray-900 text-base truncate">
+                                      {appointment.provider_services?.service_name || 'Servicio'}
+                                    </h4>
+                                    <Badge 
+                                      variant={appointment.status === 'confirmed' ? 'default' : appointment.status === 'pending' ? 'secondary' : appointment.status === 'completed' ? 'default' : 'destructive'} 
+                                      className="shrink-0 text-xs font-semibold px-2 py-1 shadow-sm"
+                                    >
+                                      {appointment.status === 'confirmed' && '✓ Confirmada'}
+                                      {appointment.status === 'pending' && '⏳ Pendiente'}
+                                      {appointment.status === 'cancelled' && '✕ Cancelada'}
+                                      {appointment.status === 'completed' && '✓ Completada'}
+                                    </Badge>
+                                  </div>
+                                  <div className="space-y-2.5">
+                                    {appointment.provider_services?.service_category && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-700 bg-purple-50 rounded-lg px-3 py-2 border border-purple-100">
+                                        <Tag className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span className="font-medium capitalize">{appointment.provider_services.service_category}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                      <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="font-medium">{appointment.appointment_time}</span>
+                                    </div>
+                                    {appointment.provider_services?.duration_minutes && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                        <Timer className="w-4 h-4 text-blue-600 shrink-0" />
+                                        <span className="font-medium">Duración: {appointment.provider_services.duration_minutes} minutos</span>
+                                      </div>
+                                    )}
+                                    {appointment.provider_services?.providers?.business_name && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                                        <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                                        <span className="truncate font-medium">{appointment.provider_services.providers.business_name}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 text-sm text-gray-700 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg px-3 py-2 border border-emerald-100">
+                                      <Coins className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="font-bold text-emerald-700">
+                                        {appointment.provider_services?.currency === 'GTQ' ? 'Q.' : '$'}{appointment.provider_services?.price || 0}
+                                      </span>
+                                    </div>
+                                    {appointment.provider_services?.description && (
+                                      <div className="mt-3 pt-3 border-t border-gray-200">
+                                        <div className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                                          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                          <div>
+                                            <span className="font-semibold text-blue-700 block mb-1">Descripción:</span>
+                                            <p className="text-gray-700">{appointment.provider_services.description}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {appointment.notes && (
+                                      <div className="mt-3 pt-3 border-t border-gray-200">
+                                        <p className="text-xs text-gray-600 italic bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                                          <span className="font-semibold text-blue-700">Mis Notas:</span> {appointment.notes}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      {appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length === 0 && (
+                        <div className="text-center py-12 text-gray-500">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                            <Calendar className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <p className="font-medium text-gray-600">No hay citas para este día</p>
+                          <p className="text-sm text-gray-500 mt-1">Selecciona otra fecha</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p className="font-medium text-gray-600">Selecciona una fecha</p>
+                      <p className="text-sm text-gray-500 mt-1">en el calendario para ver las citas</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Charts and Analytics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
@@ -532,17 +893,17 @@ const Dashboard: React.FC = () => {
           <CardHeader className="pb-3 md:pb-6">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <BarChart3 className="w-4 h-4 md:w-5 md:h-5 text-purple-600" />
-              Secciones de la Plataforma
+              Resumen de Secciones
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 md:space-y-4">
+          <CardContent className="space-y-3 md:space-y-4 max-h-[600px] overflow-y-auto">
             {platformSections.map((section) => {
               const IconComponent = section.icon;
               return (
                 <div 
                   key={section.id}
                   className={`bg-gradient-to-r ${section.color} rounded-xl p-3 md:p-4 text-white cursor-pointer hover:scale-105 transition-transform`}
-                  onClick={() => navigate(`/client-dashboard?section=${section.id}`)}
+                  onClick={() => section.path ? navigate(section.path) : navigate(`/client-dashboard?section=${section.id}`)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 md:space-x-3">

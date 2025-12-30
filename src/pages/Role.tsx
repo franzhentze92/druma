@@ -4,16 +4,77 @@ import { Building2, User as UserIcon, Heart } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 const Role: React.FC = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('client')
+  const [isSaving, setIsSaving] = useState(false)
 
-  const choose = (role: 'client' | 'provider' | 'shelter') => {
+  const choose = async (role: 'client' | 'provider' | 'shelter') => {
     console.log('Role selected:', role)
+    
+    // Save to localStorage first (for immediate access)
     localStorage.setItem('user_role', role)
     console.log('Role saved to localStorage:', localStorage.getItem('user_role'))
     
+    // Save to database if user is authenticated
+    if (user) {
+      setIsSaving(true)
+      try {
+        // Check if user profile exists
+        const { data: existingProfile, error: fetchError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .single()
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          console.error('Error checking profile:', fetchError)
+        }
+
+        if (existingProfile) {
+          // Update existing profile
+          const { error: updateError } = await supabase
+            .from('user_profiles')
+            .update({ 
+              role: role,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', user.id)
+
+          if (updateError) {
+            console.error('Error updating role in database:', updateError)
+          } else {
+            console.log('Role updated in database:', role)
+          }
+        } else {
+          // Create new profile with role
+          const { error: insertError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              role: role,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+
+          if (insertError) {
+            console.error('Error creating profile with role:', insertError)
+          } else {
+            console.log('Profile created with role in database:', role)
+          }
+        }
+      } catch (error) {
+        console.error('Error saving role to database:', error)
+      } finally {
+        setIsSaving(false)
+      }
+    }
+    
+    // Navigate to appropriate dashboard
     switch (role) {
       case 'client':
         console.log('Navigating to pet room...')
@@ -36,7 +97,7 @@ const Role: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-8 text-white mb-6">
-            <h1 className="text-4xl font-bold mb-3">🐾 ¡Bienvenido a Druma!</h1>
+            <h1 className="text-4xl font-bold mb-3">🐾 ¡Bienvenido a PetHub!</h1>
             <h2 className="text-2xl font-semibold mb-2">Elige tu aventura</h2>
             <p className="text-purple-100 text-lg">¿Cómo quieres comenzar tu viaje con las mascotas?</p>
           </div>

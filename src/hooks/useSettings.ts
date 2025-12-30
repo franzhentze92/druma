@@ -24,16 +24,23 @@ export const useUserProfile = (userId?: string) => {
 
       if (error) {
         console.error('Error fetching user profile:', error)
-        // If no profile exists, create one
+        // If no profile exists, try to create one with data from localStorage if available
         if (error.code === 'PGRST116') {
-          console.log('No profile found, creating default profile...')
+          console.log('No profile found, checking for pending registration data...')
+          
+          // Try to get pending registration data from localStorage
+          const pendingDataStr = localStorage.getItem('pending_profile_data');
+          const pendingData = pendingDataStr ? JSON.parse(pendingDataStr) : null;
+          const storedRole = localStorage.getItem('user_role');
+          
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
             .insert({
               user_id: userId!,
-              full_name: null,
-              phone: null,
+              full_name: pendingData?.full_name || null,
+              phone: pendingData?.phone || null,
               address: null,
+              role: pendingData?.role || storedRole || null,
             })
             .select()
             .single()
@@ -42,6 +49,12 @@ export const useUserProfile = (userId?: string) => {
             console.error('Error creating user profile:', createError)
             throw createError
           }
+          
+          // Clear pending data after successful creation
+          if (pendingDataStr) {
+            localStorage.removeItem('pending_profile_data');
+          }
+          
           return newProfile
         }
         throw error

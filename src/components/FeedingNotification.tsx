@@ -4,7 +4,7 @@ import { FeedingScheduleService, AutomatedMeal } from '../services/FeedingSchedu
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import { 
   Bell, 
   Clock, 
@@ -22,7 +22,6 @@ interface FeedingNotificationProps {
 
 const FeedingNotification: React.FC<FeedingNotificationProps> = ({ onMealCompleted }) => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [upcomingMeals, setUpcomingMeals] = useState<AutomatedMeal[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -41,11 +40,7 @@ const FeedingNotification: React.FC<FeedingNotificationProps> = ({ onMealComplet
       console.error('Error loading upcoming meals:', error);
       // Don't show error toast for missing tables, just log it
       if (error.code !== '42P01' && !error.message?.includes('does not exist')) {
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar las comidas próximas",
-          variant: "destructive",
-        });
+        toast.error("No se pudieron cargar las comidas próximas");
       }
       setUpcomingMeals([]);
     } finally {
@@ -56,19 +51,12 @@ const FeedingNotification: React.FC<FeedingNotificationProps> = ({ onMealComplet
   const markMealAsCompleted = async (mealId: string) => {
     try {
       await FeedingScheduleService.markMealAsCompleted(mealId, user?.id || '');
-      toast({
-        title: "¡Éxito!",
-        description: "Comida marcada como completada",
-      });
+      toast.success("Comida marcada como completada");
       loadUpcomingMeals();
       onMealCompleted?.();
     } catch (error) {
       console.error('Error marking meal as completed:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo marcar la comida como completada",
-        variant: "destructive",
-      });
+      toast.error("No se pudo marcar la comida como completada");
     }
   };
 
@@ -76,35 +64,21 @@ const FeedingNotification: React.FC<FeedingNotificationProps> = ({ onMealComplet
     try {
       // This would allow users to modify an auto-completed meal
       // For now, we'll just show a message that manual override is available
-      toast({
-        title: "Comida Auto-Completada",
-        description: "Esta comida fue completada automáticamente. Puedes editarla en el historial.",
-      });
+      toast.success("Esta comida fue completada automáticamente. Puedes editarla en el historial.");
     } catch (error) {
       console.error('Error overriding auto-completed meal:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo modificar la comida",
-        variant: "destructive",
-      });
+      toast.error("No se pudo modificar la comida");
     }
   };
 
   const skipMeal = async (mealId: string) => {
     try {
       await FeedingScheduleService.skipMeal(mealId, user?.id || '', 'Comida omitida por el usuario');
-      toast({
-        title: "Comida omitida",
-        description: "La comida ha sido marcada como omitida",
-      });
+      toast.success("La comida ha sido marcada como omitida");
       loadUpcomingMeals();
     } catch (error) {
       console.error('Error skipping meal:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo omitir la comida",
-        variant: "destructive",
-      });
+      toast.error("No se pudo omitir la comida");
     }
   };
 

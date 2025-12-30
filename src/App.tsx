@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from '@/components/ui/sonner';
 import { CartProvider } from '@/contexts/CartContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -112,6 +112,7 @@ function App() {
                 <Route path="/client-orders" element={<Index />} />
                 <Route path="/marketplace/services" element={<Index />} />
                 <Route path="/marketplace/products" element={<Index />} />
+                <Route path="/pet-journey/:petId" element={<Index />} />
                 
                 {/* Dashboard routes */}
                 <Route path="/client-dashboard" element={<Index />} />

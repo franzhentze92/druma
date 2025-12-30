@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Eye, EyeOff, Mail, Lock, User, PawPrint, ArrowLeft, Home, Phone } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, PawPrint, ArrowLeft, Home, Phone, Building2, Heart } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,7 @@ export const Register: React.FC = () => {
     phone: '',
     password: '',
     confirmPassword: '',
+    role: '' as 'client' | 'provider' | 'shelter' | '',
     acceptTerms: false,
     acceptMarketing: false
   });
@@ -38,6 +39,11 @@ export const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
     
     if (formData.password !== formData.confirmPassword) {
       toast({
@@ -56,51 +62,76 @@ export const Register: React.FC = () => {
       });
       return;
     }
+
+    if (!formData.role) {
+      toast({
+        title: "Error",
+        description: "Debes seleccionar un tipo de cuenta",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
+      // Clear any existing role from localStorage to ensure fresh start
+      localStorage.removeItem('user_role');
+      
       // Create user account with Supabase Auth
-      await signUp(formData.email, formData.password);
+      const signUpData = await signUp(formData.email, formData.password);
+      console.log('Register: Sign up data received:', signUpData);
       
-      // Get the current user
-      const { data: { user } } = await supabase.auth.getUser();
+      // Get the user from signUp result (more reliable than getUser when email confirmation is required)
+      const user = signUpData?.user;
+      console.log('Register: User from signUp:', user);
       
-      if (user) {
-        // Save additional user data to user_profiles table
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            user_id: user.id,
-            full_name: `${formData.firstName} ${formData.lastName}`,
-            phone: formData.phone || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        if (profileError) {
-          console.error('Error saving profile:', profileError);
-          toast({
-            title: "Error",
-            description: "Error al guardar los datos del perfil",
-            variant: "destructive",
-          });
-        } else {
-          // Set a flag to indicate this is a new user who might want to create a pet
-          localStorage.setItem('is_new_user', 'true');
-          
-          toast({
-            title: "¡Cuenta creada exitosamente!",
-            description: "Tu cuenta ha sido creada. Revisa tu email para confirmar tu cuenta.",
-          });
-          navigate('/login');
-        }
-      }
+      // Store registration data temporarily to create profile after email confirmation
+      const registrationData = {
+        full_name: `${formData.firstName} ${formData.lastName}`,
+        phone: formData.phone || null,
+        role: formData.role
+      };
+      
+      // Save registration data to localStorage (will be used after email confirmation)
+      localStorage.setItem('pending_profile_data', JSON.stringify(registrationData));
+      
+      // Save the selected role to localStorage
+      localStorage.setItem('user_role', formData.role);
+      
+      // Set a flag to indicate this is a new user
+      localStorage.setItem('is_new_user', 'true');
+      
+      // Note: Profile will be created when user logs in after email confirmation
+      // This avoids RLS issues when there's no active session
+      
+      toast({
+        title: "¡Cuenta creada exitosamente!",
+        description: "Tu cuenta ha sido creada. Revisa tu email para confirmar tu cuenta antes de iniciar sesión.",
+      });
+      
+      // Redirect to login page
+      navigate('/login');
     } catch (error: any) {
       console.error('Registration error:', error);
+      
+      // Handle specific error cases
+      let errorMessage = "Error al crear la cuenta";
+      
+      if (error.status === 429 || error.message?.includes('Too Many Requests')) {
+        errorMessage = "Has intentado registrarte demasiadas veces. Por favor espera unos momentos antes de intentar de nuevo.";
+      } else if (error.message?.includes('already registered') || error.message?.includes('User already registered')) {
+        errorMessage = "Este email ya está registrado. Por favor inicia sesión o usa otro email.";
+      } else if (error.message?.includes('rate limit') || error.message?.includes('security purposes')) {
+        const waitTime = error.message.match(/\d+/)?.[0] || 'algunos';
+        errorMessage = `Por seguridad, debes esperar ${waitTime} segundos antes de intentar registrarte de nuevo.`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Error",
-        description: error.message || "Error al crear la cuenta",
+        title: "Error de Registro",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -130,7 +161,7 @@ export const Register: React.FC = () => {
             <PawPrint className="w-8 h-8 md:w-10 md:h-10 text-white" />
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-            ¡Únete a Druma!
+            ¡Únete a PetHub!
           </h1>
           <p className="text-sm md:text-base text-gray-600">
             Crea tu cuenta y comienza a cuidar a tus mascotas
@@ -226,6 +257,92 @@ export const Register: React.FC = () => {
                   placeholder="+1 (555) 123-4567"
                 />
               </div>
+            </div>
+
+            {/* Role Selection */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-gray-700">
+                Tipo de Cuenta *
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, role: 'client' }))}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.role === 'client'
+                      ? 'border-purple-500 bg-purple-50 shadow-md'
+                      : 'border-gray-200 hover:border-purple-300 bg-white'
+                  }`}
+                >
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      formData.role === 'client'
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
+                        : 'bg-gray-100'
+                    }`}>
+                      <User className={`w-6 h-6 ${formData.role === 'client' ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      formData.role === 'client' ? 'text-purple-700' : 'text-gray-600'
+                    }`}>
+                      Cliente
+                    </span>
+                  </div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, role: 'provider' }))}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.role === 'provider'
+                      ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                      : 'border-gray-200 hover:border-emerald-300 bg-white'
+                  }`}
+                >
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      formData.role === 'provider'
+                        ? 'bg-gradient-to-r from-emerald-500 to-green-600'
+                        : 'bg-gray-100'
+                    }`}>
+                      <Building2 className={`w-6 h-6 ${formData.role === 'provider' ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      formData.role === 'provider' ? 'text-emerald-700' : 'text-gray-600'
+                    }`}>
+                      Proveedor
+                    </span>
+                  </div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, role: 'shelter' }))}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.role === 'shelter'
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 hover:border-blue-300 bg-white'
+                  }`}
+                >
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      formData.role === 'shelter'
+                        ? 'bg-gradient-to-r from-blue-500 to-cyan-600'
+                        : 'bg-gray-100'
+                    }`}>
+                      <Heart className={`w-6 h-6 ${formData.role === 'shelter' ? 'text-white' : 'text-gray-400'}`} />
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      formData.role === 'shelter' ? 'text-blue-700' : 'text-gray-600'
+                    }`}>
+                      Albergue
+                    </span>
+                  </div>
+                </button>
+              </div>
+              {!formData.role && (
+                <p className="text-xs text-red-500">Debes seleccionar un tipo de cuenta</p>
+              )}
             </div>
 
             {/* Password Field */}
@@ -333,7 +450,7 @@ export const Register: React.FC = () => {
                   className="mt-1"
                 />
                 <Label htmlFor="acceptMarketing" className="text-sm text-gray-600 leading-relaxed">
-                  Me gustaría recibir noticias y actualizaciones sobre Druma (opcional)
+                  Me gustaría recibir noticias y actualizaciones sobre PetHub (opcional)
                 </Label>
               </div>
             </div>
@@ -341,7 +458,7 @@ export const Register: React.FC = () => {
             {/* Submit Button */}
             <Button 
               type="submit"
-              disabled={!formData.acceptTerms || !formData.password || !formData.confirmPassword || formData.password !== formData.confirmPassword}
+              disabled={isSubmitting || !formData.acceptTerms || !formData.role || !formData.password || !formData.confirmPassword || formData.password !== formData.confirmPassword}
               className="w-full h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {isSubmitting ? (

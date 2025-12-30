@@ -313,10 +313,11 @@ export const useShelter = (userId?: string) => {
         .from('shelters')
         .select('*')
         .eq('owner_id', userId)
-        .single()
+        .maybeSingle()
       
-      if (error) throw error
-      return data
+      // PGRST116 means no rows found, which is okay - just return null
+      if (error && error.code !== 'PGRST116') throw error
+      return data || null
     },
     enabled: !!userId,
   })

@@ -11,7 +11,7 @@ import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
 import { Checkbox } from './ui/checkbox';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import { FeedingScheduleService, FeedingSchedule, AutomatedMeal } from '../services/FeedingScheduleService';
 import ManualFeedingForm from './ManualFeedingForm';
 import NutritionAnalytics from './NutritionAnalytics';
@@ -96,7 +96,6 @@ interface AutomatedMeal {
 
 const FeedingScheduleManager: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { isMobileMenuOpen, toggleMobileMenu } = useNavigation();
   
   // State management
@@ -172,11 +171,7 @@ const FeedingScheduleManager: React.FC = () => {
       setPets(data || []);
     } catch (error) {
       console.error('Error loading pets:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las mascotas",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar las mascotas");
     }
   };
 
@@ -224,11 +219,7 @@ const FeedingScheduleManager: React.FC = () => {
       setAvailableFoods(data || []);
     } catch (error) {
       console.error('Error loading foods:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los alimentos",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar los alimentos");
     } finally {
       setLoadingFoods(false);
     }
@@ -259,11 +250,7 @@ const FeedingScheduleManager: React.FC = () => {
       setSchedules(data || []);
     } catch (error) {
       console.error('Error loading schedules:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los horarios",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar los horarios");
     }
   };
 
@@ -308,11 +295,7 @@ const FeedingScheduleManager: React.FC = () => {
       setAutomatedMeals(data || []);
     } catch (error) {
       console.error('Error loading automated meals:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las comidas automáticas",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar las comidas automáticas");
     } finally {
       setLoadingMeals(false);
     }
@@ -400,31 +383,20 @@ const FeedingScheduleManager: React.FC = () => {
             errorMessage = "Error: Algunos campos requeridos están vacíos. Revisa que tus horarios tengan mascota y comida asignados.";
           }
           
-          toast({
-            title: "Error",
-            description: errorMessage,
-            variant: "destructive",
-          });
+          toast.error(errorMessage);
           return;
         }
         
         console.log('Meals created successfully:', data);
         setAutomatedMeals(data || []);
         
-        toast({
-          title: "¡Éxito!",
-          description: `${mealsToCreate.length} comidas generadas para ${selectedDate}`,
-        });
+        toast.success(`${mealsToCreate.length} comidas generadas para ${selectedDate}`);
       } else {
         setAutomatedMeals([]);
       }
     } catch (error) {
       console.error('Error generating meals:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron generar las comidas",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron generar las comidas");
     }
   };
 
@@ -458,11 +430,7 @@ const FeedingScheduleManager: React.FC = () => {
 
   const saveSchedule = async () => {
     if (!selectedPet || !scheduleName || feedingTimes.length === 0) {
-      toast({
-        title: "Campos requeridos",
-        description: "Por favor completa todos los campos requeridos",
-        variant: "destructive",
-      });
+      toast.error("Por favor completa todos los campos requeridos");
       return;
     }
 
@@ -505,10 +473,7 @@ const FeedingScheduleManager: React.FC = () => {
         });
       }
 
-      toast({
-        title: "¡Éxito!",
-        description: `Horario ${editingSchedule ? 'actualizado' : 'creado'} exitosamente`,
-      });
+      toast.success(`Horario ${editingSchedule ? 'actualizado' : 'creado'} exitosamente`);
 
       // Reset form
       resetForm();
@@ -516,11 +481,7 @@ const FeedingScheduleManager: React.FC = () => {
       loadAutomatedMeals();
     } catch (error) {
       console.error('Error saving schedule:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo guardar el horario",
-        variant: "destructive",
-      });
+      toast.error("No se pudo guardar el horario");
     } finally {
       setLoading(false);
     }
@@ -570,19 +531,35 @@ const FeedingScheduleManager: React.FC = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "¡Éxito!",
-        description: `Horario ${!isActive ? 'activado' : 'pausado'}`,
-      });
+      toast.success(`Horario ${!isActive ? 'activado' : 'pausado'}`);
 
       loadSchedules();
     } catch (error) {
       console.error('Error updating schedule:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo actualizar el horario",
-        variant: "destructive",
-      });
+      toast.error("No se pudo actualizar el horario");
+    }
+  };
+
+  const deleteSchedule = async (scheduleId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar este horario de alimentación?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pet_feeding_schedules')
+        .delete()
+        .eq('id', scheduleId);
+
+      if (error) throw error;
+
+      toast.success("Horario eliminado correctamente");
+
+      loadSchedules();
+      loadAutomatedMeals();
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      toast.error("No se pudo eliminar el horario");
     }
   };
 
@@ -599,19 +576,12 @@ const FeedingScheduleManager: React.FC = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "¡Éxito!",
-        description: "Comida marcada como completada",
-      });
+      toast.success("Comida marcada como completada");
 
       loadAutomatedMeals();
     } catch (error) {
       console.error('Error marking meal as completed:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo marcar la comida como completada",
-        variant: "destructive",
-      });
+      toast.error("No se pudo marcar la comida como completada");
     }
   };
 
@@ -642,7 +612,7 @@ const FeedingScheduleManager: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       <PageHeader 
         title="Horarios de Alimentación"
         subtitle="Configura horarios automáticos para la alimentación de tus mascotas"
@@ -720,6 +690,15 @@ const FeedingScheduleManager: React.FC = () => {
                               Activar
                             </>
                           )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteSchedule(schedule.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Eliminar
                         </Button>
                       </div>
                     </div>

@@ -1,14 +1,127 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { AppProvider } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [profileCreated, setProfileCreated] = useState(false);
+
+  // Create user profile if it doesn't exist (after email confirmation)
+  useEffect(() => {
+    if (loading || !user || profileCreated) return;
+
+    const createProfileIfNeeded = async () => {
+      try {
+        // Check if profile exists
+        const { data: existingProfile, error: fetchError } = await supabase
+          .from('user_profiles')
+          .select('id, role')
+          .eq('user_id', user.id)
+          .single();
+
+        // If profile doesn't exist, create it
+        if (fetchError && fetchError.code === 'PGRST116') {
+          console.log('Index: No profile found, creating profile...');
+          
+          // Get pending registration data from localStorage
+          const pendingDataStr = localStorage.getItem('pending_profile_data');
+          const pendingData = pendingDataStr ? JSON.parse(pendingDataStr) : null;
+          
+          // Create profile with pending data or default values
+          const { error: createError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              full_name: pendingData?.full_name || null,
+              phone: pendingData?.phone || null,
+              role: pendingData?.role || localStorage.getItem('user_role') || null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (createError) {
+            console.error('Index: Error creating profile:', createError);
+          } else {
+            console.log('Index: Profile created successfully');
+            // Clear pending data
+            localStorage.removeItem('pending_profile_data');
+            setProfileCreated(true);
+          }
+        } else if (existingProfile) {
+          // Profile exists, update with pending data if available or if profile has NULL fields
+          const pendingDataStr = localStorage.getItem('pending_profile_data');
+          const needsUpdate = pendingDataStr || 
+            !existingProfile.full_name || 
+            !existingProfile.role ||
+            (existingProfile.role === null && localStorage.getItem('user_role'));
+
+          if (needsUpdate) {
+            const pendingData = pendingDataStr ? JSON.parse(pendingDataStr) : null;
+            const roleToUse = pendingData?.role || localStorage.getItem('user_role') || existingProfile.role;
+            
+            const updateData: any = {
+              updated_at: new Date().toISOString()
+            };
+
+            // Update fields that are NULL or if we have pending data
+            if (pendingData) {
+              if (pendingData.full_name && !existingProfile.full_name) {
+                updateData.full_name = pendingData.full_name;
+              }
+              if (pendingData.phone && !existingProfile.phone) {
+                updateData.phone = pendingData.phone;
+              }
+              if (pendingData.role) {
+                updateData.role = pendingData.role;
+              }
+            } else {
+              // If no pending data but profile has NULL fields, try to get from localStorage
+              const storedRole = localStorage.getItem('user_role');
+              if (storedRole && !existingProfile.role) {
+                updateData.role = storedRole;
+              }
+            }
+
+            // Only update if we have something to update
+            if (Object.keys(updateData).length > 1 || updateData.role) {
+              if (roleToUse && !updateData.role) {
+                updateData.role = roleToUse;
+              }
+
+              const { error: updateError } = await supabase
+                .from('user_profiles')
+                .update(updateData)
+                .eq('user_id', user.id);
+              
+              if (updateError) {
+                console.error('Index: Error updating profile:', updateError);
+              } else {
+                console.log('Index: Profile updated with registration data');
+                if (roleToUse) {
+                  localStorage.setItem('user_role', roleToUse);
+                }
+              }
+            }
+
+            if (pendingDataStr) {
+              localStorage.removeItem('pending_profile_data');
+            }
+          }
+          setProfileCreated(true);
+        }
+      } catch (error) {
+        console.error('Index: Error in createProfileIfNeeded:', error);
+      }
+    };
+
+    createProfileIfNeeded();
+  }, [user, loading, profileCreated]);
 
   useEffect(() => {
     if (loading) return
@@ -47,6 +160,7 @@ const Index: React.FC = () => {
       return
     }
     if (role === 'client' && location.pathname !== '/marketplace/products' && location.pathname !== '/' && 
+        location.pathname !== '/dashboard' &&
         !location.pathname.startsWith('/ajustes') && !location.pathname.startsWith('/care-hub') && 
         !location.pathname.startsWith('/social-hub') && !location.pathname.startsWith('/pet-shop') &&
         !location.pathname.startsWith('/marketplace') && !location.pathname.startsWith('/adopcion') && 
@@ -56,6 +170,7 @@ const Index: React.FC = () => {
         !location.pathname.startsWith('/meal-journal') && !location.pathname.startsWith('/adventure-log') && 
         !location.pathname.startsWith('/health-journal') && !location.pathname.startsWith('/pet-reminders') && 
         !location.pathname.startsWith('/deliveries') && !location.pathname.startsWith('/client-orders') &&
+        !location.pathname.startsWith('/pet-journey') &&
         !location.pathname.startsWith('/marketplace/services') && !location.pathname.startsWith('/marketplace/products')) {
       console.log('Client role detected, redirecting to products page')
       navigate('/marketplace/products')
@@ -72,7 +187,7 @@ const Index: React.FC = () => {
           <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">🐾</span>
           </div>
-          <h2 className="text-xl font-semibold text-gray-700">Cargando Druma...</h2>
+          <h2 className="text-xl font-semibold text-gray-700">Cargando PetHub...</h2>
         </div>
       </div>
     );

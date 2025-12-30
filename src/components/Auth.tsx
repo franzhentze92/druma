@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Mail, Lock } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 const Auth: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true)
@@ -24,11 +25,60 @@ const Auth: React.FC = () => {
   const { signIn, signUp, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
-  // Redirect to role selection if user is already authenticated
+  // Redirect based on user role if user is already authenticated
   useEffect(() => {
     if (user && !authLoading) {
-      console.log('Auth: User is authenticated, redirecting to role selection')
-      navigate('/role')
+      const checkRoleAndRedirect = async () => {
+        // First check localStorage
+        let role = localStorage.getItem('user_role') as 'client' | 'provider' | 'shelter' | null
+        console.log('Auth: User is authenticated, checking role from localStorage:', role)
+        
+        // If no role in localStorage, try to get it from the database
+        if (!role) {
+          console.log('Auth: No role in localStorage, checking database...')
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('role')
+            .eq('user_id', user.id)
+            .single()
+          
+          if (profile?.role) {
+            role = profile.role
+            localStorage.setItem('user_role', role)
+            console.log('Auth: Role found in database:', role)
+          }
+        }
+        
+        // Validate role - only accept valid roles
+        const validRoles = ['client', 'provider', 'shelter']
+        const isValidRole = role && validRoles.includes(role)
+        
+        if (isValidRole) {
+          // User already has a valid role, redirect to appropriate dashboard
+          console.log('Auth: Valid role found, redirecting to dashboard:', role)
+          switch (role) {
+            case 'client':
+              navigate('/marketplace/products')
+              break
+            case 'provider':
+              navigate('/provider')
+              break
+            case 'shelter':
+              navigate('/shelter-dashboard')
+              break
+          }
+        } else {
+          // No valid role found, clear any invalid value and redirect to role selection
+          if (role) {
+            console.log('Auth: Invalid role found, clearing:', role)
+            localStorage.removeItem('user_role')
+          }
+          console.log('Auth: No valid role found, redirecting to role selection')
+          navigate('/role')
+        }
+      }
+      
+      checkRoleAndRedirect()
     }
   }, [user, authLoading, navigate])
 
@@ -99,7 +149,7 @@ const Auth: React.FC = () => {
           <div className="mx-auto w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mb-4">
             <span className="text-2xl">🐾</span>
           </div>
-          <CardTitle className="text-2xl font-bold">Druma</CardTitle>
+          <CardTitle className="text-2xl font-bold">PetHub</CardTitle>
           <CardDescription>
             {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea una nueva cuenta'}
           </CardDescription>

@@ -22,7 +22,7 @@ export const Terms: React.FC = () => {
               Términos de <span className="text-yellow-300">Servicio</span>
             </h1>
             <p className="text-xl text-purple-100 max-w-3xl mx-auto leading-relaxed">
-              Estos términos rigen el uso de Druma. 
+              Estos términos rigen el uso de PetHub. 
               Por favor, léelos cuidadosamente antes de usar nuestra plataforma.
             </p>
           </div>
@@ -60,8 +60,8 @@ export const Terms: React.FC = () => {
                   Introducción
                 </h2>
                 <p className="text-lg text-gray-600 leading-relaxed mb-4">
-                  Bienvenido a Druma. Estos Términos y Condiciones ("Términos") rigen tu uso de nuestra 
-                  plataforma web y servicios relacionados (colectivamente, el "Servicio") operados por Druma.
+                  Bienvenido a PetHub. Estos Términos y Condiciones ("Términos") rigen tu uso de nuestra 
+                  plataforma web y servicios relacionados (colectivamente, el "Servicio") operados por PetHub.
                 </p>
                 <p className="text-lg text-gray-600 leading-relaxed">
                   Al acceder o usar nuestro Servicio, aceptas estar sujeto a estos Términos. 
@@ -93,7 +93,7 @@ export const Terms: React.FC = () => {
                   Descripción del Servicio
                 </h2>
                 <p className="text-lg text-gray-600 leading-relaxed mb-4">
-                  Druma es una plataforma integral para el cuidado de mascotas que ofrece:
+                  PetHub es una plataforma integral para el cuidado de mascotas que ofrece:
                 </p>
                 <ul className="text-lg text-gray-600 space-y-2 mb-6">
                   <li>• Seguimiento de salud y ejercicio de mascotas</li>
@@ -176,7 +176,7 @@ export const Terms: React.FC = () => {
                   <div className="bg-blue-50 p-6 rounded-lg">
                     <h3 className="text-xl font-semibold text-blue-800 mb-3">Tu Contenido</h3>
                     <p className="text-blue-700 mb-3">
-                      Mantienes todos los derechos sobre el contenido que subes a Druma, incluyendo:
+                      Mantienes todos los derechos sobre el contenido que subes a PetHub, incluyendo:
                     </p>
                     <ul className="text-blue-700 space-y-1 text-sm">
                       <li>• Fotos y videos de tus mascotas</li>
@@ -236,7 +236,7 @@ export const Terms: React.FC = () => {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-red-800 mb-3">Exención de Responsabilidad</h3>
                   <p className="text-red-700 mb-3">
-                    En la máxima medida permitida por la ley, Druma no será responsable por:
+                    En la máxima medida permitida por la ley, PetHub no será responsable por:
                   </p>
                   <ul className="text-red-700 space-y-1 text-sm">
                     <li>• Daños indirectos, incidentales o consecuenciales</li>
@@ -286,7 +286,7 @@ export const Terms: React.FC = () => {
                     Si tienes preguntas sobre estos Términos y Condiciones, puedes contactarnos:
                   </p>
                   <ul className="text-gray-600 space-y-2">
-                    <li><strong>Email:</strong> legal@druma.com</li>
+                    <li><strong>Email:</strong> legal@pethub.com</li>
                     <li><strong>Dirección:</strong> Zona 10, Guatemala City, Guatemala</li>
                     <li><strong>Teléfono:</strong> +502 1234-5678</li>
                   </ul>

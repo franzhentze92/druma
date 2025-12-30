@@ -151,31 +151,71 @@ const ClientOrders: React.FC = () => {
       setOrders(processedOrders);
 
       // Fetch reservations with service details
+      console.log('Fetching reservations for client_id:', user.id);
       const { data: reservationsData, error: reservationsError } = await supabase
         .from('service_appointments')
         .select(`
           *,
-          service:provider_services!service_appointments_service_id_fkey(
+          provider_services (
             id,
             service_name,
             description,
             price,
+            currency,
+            duration_minutes,
             provider_id,
-            providers!provider_services_provider_id_fkey(
+            providers (
               id,
               business_name,
-              user_id
+              user_id,
+              address,
+              phone
             )
+          ),
+          provider_service_time_slots:provider_service_time_slots!service_appointments_time_slot_id_fkey (
+            slot_start_time,
+            slot_end_time
           )
         `)
         .eq('client_id', user.id)
         .order('appointment_date', { ascending: false });
 
+      console.log('Reservations query result:', { 
+        reservationsData, 
+        reservationsError,
+        count: reservationsData?.length || 0
+      });
+
       if (reservationsError) {
         console.error('Error fetching reservations:', reservationsError);
         setReservations([]);
       } else {
-        setReservations(reservationsData || []);
+        // Process reservations to ensure data structure is correct
+        const processedReservations = (reservationsData || []).map(reservation => {
+          // Get time slot information
+          const timeSlot = reservation.provider_service_time_slots;
+          let appointmentTime = '';
+          if (timeSlot?.slot_start_time && timeSlot?.slot_end_time) {
+            appointmentTime = `${timeSlot.slot_start_time.substring(0, 5)} - ${timeSlot.slot_end_time.substring(0, 5)}`;
+          } else if (reservation.appointment_time) {
+            appointmentTime = reservation.appointment_time;
+          } else if (reservation.appointment_date) {
+            // Fallback to appointment_date if time slot not available
+            const date = new Date(reservation.appointment_date);
+            appointmentTime = date.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+          }
+          
+          return {
+            ...reservation,
+            service: reservation.provider_services || null,
+            // Ensure service name is accessible
+            service_name: reservation.provider_services?.service_name || 'Servicio desconocido',
+            provider_name: reservation.provider_services?.providers?.business_name || 'Proveedor desconocido',
+            appointment_time: appointmentTime
+          };
+        });
+        console.log('Processed reservations:', processedReservations);
+        setReservations(processedReservations);
       }
 
     } catch (error) {
@@ -294,6 +334,8 @@ const ClientOrders: React.FC = () => {
         return { text: 'Pendiente', className: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' };
       case 'confirmed':
         return { text: 'Confirmado', className: 'bg-blue-100 text-blue-800 hover:bg-blue-200' };
+      case 'completed':
+        return { text: 'Completado', className: 'bg-green-100 text-green-800 hover:bg-green-200' };
       case 'processing':
         return { text: 'Procesando', className: 'bg-purple-100 text-purple-800 hover:bg-purple-200' };
       case 'shipped':
@@ -418,7 +460,7 @@ const ClientOrders: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       {/* Header Bar */}
       <PageHeader 
         title="Mis Órdenes"
@@ -647,6 +689,21 @@ const ClientOrders: React.FC = () => {
                               {order.order_items?.length || 0} producto{(order.order_items?.length || 0) !== 1 ? 's' : ''}
                             </div>
                             <div className="flex items-center gap-1">
+                              {(() => {
+                                const hasProducts = order.order_items?.some((item: OrderItem) => item.item_type === 'product');
+                                const hasServices = order.order_items?.some((item: OrderItem) => item.item_type === 'service');
+                                const orderType = hasProducts && hasServices ? 'Mixto' : hasProducts ? 'Producto' : 'Servicio';
+                                const orderTypeColor = hasProducts && hasServices ? 'text-purple-600' : hasProducts ? 'text-blue-600' : 'text-emerald-600';
+                                const OrderTypeIcon = hasProducts && hasServices ? Package : hasProducts ? Package : Calendar;
+                                return (
+                                  <Badge variant="outline" className={`text-xs ${orderTypeColor} border-current flex items-center gap-1`}>
+                                    <OrderTypeIcon className="w-3 h-3" />
+                                    {orderType}
+                                  </Badge>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex items-center gap-1">
                               <CreditCard className="w-4 h-4" />
                               {formatPrice(order.grand_total, order.currency)}
                             </div>
@@ -869,7 +926,7 @@ const ClientOrders: React.FC = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900">
-                              {reservation.service?.service_name || `Servicio #${reservation.id?.slice(-8) || 'N/A'}`}
+                              {reservation.service_name || reservation.service?.service_name || reservation.provider_services?.service_name || `Servicio #${reservation.id?.slice(-8) || 'N/A'}`}
                             </h3>
                             <Badge 
                               className={getStatusBadge(reservation.status).className}
@@ -879,15 +936,20 @@ const ClientOrders: React.FC = () => {
                           </div>
                           <p className="text-sm text-gray-600 mb-2">
                             {formatDate(reservation.appointment_date)}
+                            {reservation.appointment_time && (
+                              <span className="ml-2 font-medium">
+                                • {reservation.appointment_time}
+                              </span>
+                            )}
                           </p>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
-                              {reservation.service?.providers?.business_name || `Proveedor #${reservation.provider_id?.slice(-8) || 'N/A'}`}
+                              {reservation.provider_name || reservation.service?.providers?.business_name || reservation.provider_services?.providers?.business_name || `Proveedor #${reservation.provider_id?.slice(-8) || 'N/A'}`}
                             </div>
                             <div className="flex items-center gap-1">
                               <CreditCard className="w-4 h-4" />
-                              {formatPrice(reservation.total_price, reservation.currency)}
+                              {formatPrice(reservation.total_price || 0, reservation.currency || 'GTQ')}
                             </div>
                           </div>
                         </div>
@@ -895,38 +957,59 @@ const ClientOrders: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
+                            onClick={async () => {
+                              // Fetch time slot details if available
+                              let timeSlotInfo = null;
+                              if (reservation.time_slot_id) {
+                                const { data: timeSlotData } = await supabase
+                                  .from('provider_service_time_slots')
+                                  .select('slot_start_time, slot_end_time')
+                                  .eq('id', reservation.time_slot_id)
+                                  .maybeSingle();
+                                
+                                if (timeSlotData) {
+                                  timeSlotInfo = timeSlotData;
+                                }
+                              }
+                              
                               setSelectedOrder({
                                 id: reservation.id,
                                 order_number: `RES-${reservation.id?.slice(-8) || 'N/A'}`,
-                                total_amount: reservation.total_price,
+                                total_amount: reservation.total_price || 0,
                                 delivery_fee: 0,
-                                grand_total: reservation.total_price,
-                                currency: reservation.currency,
-                                status: reservation.status,
+                                grand_total: reservation.total_price || 0,
+                                currency: reservation.currency || 'GTQ',
+                                status: reservation.status || 'pending',
                                 payment_method: 'service',
                                 payment_status: 'completed',
-                                delivery_name: reservation.client_name,
-                                delivery_phone: reservation.client_phone,
-                                delivery_address: '',
+                                delivery_name: reservation.client_name || '',
+                                delivery_phone: reservation.client_phone || '',
+                                delivery_address: reservation.provider_services?.providers?.address || '',
                                 delivery_city: '',
-                                delivery_instructions: reservation.notes,
+                                delivery_instructions: reservation.notes || '',
                                 created_at: reservation.created_at,
+                                reservation_data: {
+                                  appointment_date: reservation.appointment_date,
+                                  time_slot_id: reservation.time_slot_id,
+                                  time_slot: timeSlotInfo,
+                                  notes: reservation.notes,
+                                  client_email: reservation.client_email
+                                },
                                 order_items: [{
                                   id: reservation.id,
                                   item_type: 'service',
                                   item_id: reservation.service_id,
-                                  item_name: reservation.service?.service_name || `Servicio #${reservation.id?.slice(-8) || 'N/A'}`,
+                                  item_name: reservation.service_name || reservation.service?.service_name || reservation.provider_services?.service_name || `Servicio #${reservation.id?.slice(-8) || 'N/A'}`,
                                   provider_id: reservation.provider_id,
-                                  provider_name: reservation.service?.providers?.business_name || `Proveedor #${reservation.provider_id?.slice(-8) || 'N/A'}`,
-                                  unit_price: reservation.total_price,
+                                  provider_name: reservation.provider_name || reservation.service?.providers?.business_name || reservation.provider_services?.providers?.business_name || `Proveedor #${reservation.provider_id?.slice(-8) || 'N/A'}`,
+                                  unit_price: reservation.total_price || 0,
                                   quantity: 1,
-                                  total_price: reservation.total_price,
-                                  currency: reservation.currency,
-                                  item_description: 'Servicio reservado',
+                                  total_price: reservation.total_price || 0,
+                                  currency: reservation.currency || 'GTQ',
+                                  item_description: reservation.provider_services?.description || 'Servicio reservado',
                                   item_image_url: null,
-                                  provider_phone: '',
-                                  provider_address: '',
+                                  provider_phone: reservation.provider_services?.providers?.phone || '',
+                                  provider_address: reservation.provider_services?.providers?.address || '',
                                   has_delivery: false,
                                   has_pickup: false,
                                   delivery_fee: 0
@@ -981,9 +1064,17 @@ const ClientOrders: React.FC = () => {
                 <div>
                   <h3 className="font-semibold text-gray-900 mb-2">Información de la Orden</h3>
                   <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Fecha:</span> {formatDate(selectedOrder.created_at)}</p>
+                    <p><span className="font-medium">Fecha de orden:</span> {formatDate(selectedOrder.created_at)}</p>
+                    {(selectedOrder as any).reservation_data?.appointment_date && (
+                      <p><span className="font-medium">Fecha de cita:</span> {formatDate((selectedOrder as any).reservation_data.appointment_date)}</p>
+                    )}
+                    {(selectedOrder as any).reservation_data?.time_slot?.slot_start_time && (
+                      <p><span className="font-medium">Horario:</span> {
+                        `${(selectedOrder as any).reservation_data.time_slot.slot_start_time.substring(0, 5)} - ${(selectedOrder as any).reservation_data.time_slot.slot_end_time.substring(0, 5)}`
+                      }</p>
+                    )}
                     <p><span className="font-medium">Total:</span> {formatPrice(selectedOrder.grand_total, selectedOrder.currency)}</p>
-                    <p><span className="font-medium">Método de Pago:</span> {selectedOrder.payment_method}</p>
+                    <p><span className="font-medium">Método de Pago:</span> {selectedOrder.payment_method === 'service' ? 'Servicio' : selectedOrder.payment_method}</p>
                     {selectedOrder.delivered_at && (
                       <p><span className="font-medium">Entregado:</span> {formatDate(selectedOrder.delivered_at)}</p>
                     )}
@@ -991,18 +1082,23 @@ const ClientOrders: React.FC = () => {
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Información de Entrega</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    {(selectedOrder as any).reservation_data ? 'Información de Contacto' : 'Información de Entrega'}
+                  </h3>
                   <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Nombre:</span> {selectedOrder.delivery_name}</p>
-                    <p><span className="font-medium">Teléfono:</span> {selectedOrder.delivery_phone}</p>
+                    <p><span className="font-medium">Nombre:</span> {selectedOrder.delivery_name || 'N/A'}</p>
+                    <p><span className="font-medium">Teléfono:</span> {selectedOrder.delivery_phone || 'N/A'}</p>
+                    {(selectedOrder as any).reservation_data?.client_email && (
+                      <p><span className="font-medium">Email:</span> {(selectedOrder as any).reservation_data.client_email}</p>
+                    )}
                     {selectedOrder.delivery_address && (
                       <p><span className="font-medium">Dirección:</span> {selectedOrder.delivery_address}</p>
                     )}
                     {selectedOrder.delivery_city && (
                       <p><span className="font-medium">Ciudad:</span> {selectedOrder.delivery_city}</p>
                     )}
-                    {selectedOrder.delivery_instructions && (
-                      <p><span className="font-medium">Instrucciones:</span> {selectedOrder.delivery_instructions}</p>
+                    {(selectedOrder.delivery_instructions || (selectedOrder as any).reservation_data?.notes) && (
+                      <p><span className="font-medium">Notas:</span> {selectedOrder.delivery_instructions || (selectedOrder as any).reservation_data?.notes}</p>
                     )}
                   </div>
                 </div>
@@ -1012,39 +1108,78 @@ const ClientOrders: React.FC = () => {
               <div>
                 <h3 className="font-semibold text-gray-900 mb-4">Productos y Servicios</h3>
                 <div className="space-y-4">
-                  {selectedOrder.order_items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-4">
-                        {item.item_image_url ? (
-                          <img 
-                            src={item.item_image_url} 
-                            alt={item.item_name}
-                            className="w-16 h-16 object-cover rounded-lg"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
-                            <Package className="w-8 h-8 text-gray-400" />
-                          </div>
-                        )}
-                        <div>
-                        <h4 className="font-medium text-gray-900">{item.item_name}</h4>
-                        <p className="text-sm text-gray-600">{item.provider_name}</p>
-                          <p className="text-xs text-gray-500">Cantidad: {item.quantity}</p>
-                        {item.item_description && (
-                            <p className="text-xs text-gray-500 mt-1">{item.item_description}</p>
+                  {selectedOrder.order_items.map((item) => {
+                    // Check if this is a service item (from reservation)
+                    const isService = item.item_type === 'service';
+                    const reservationData = (selectedOrder as any).reservation_data;
+                    
+                    return (
+                      <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-4 flex-1">
+                          {item.item_image_url ? (
+                            <img 
+                              src={item.item_image_url} 
+                              alt={item.item_name}
+                              className="w-16 h-16 object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
+                              {isService ? (
+                                <Calendar className="w-8 h-8 text-gray-400" />
+                              ) : (
+                                <Package className="w-8 h-8 text-gray-400" />
+                              )}
+                            </div>
                           )}
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{item.item_name}</h4>
+                            <p className="text-sm text-gray-600">{item.provider_name}</p>
+                            <p className="text-xs text-gray-500">Cantidad: {item.quantity}</p>
+                            
+                            {/* Service-specific information */}
+                            {isService && reservationData && (
+                              <div className="mt-2 space-y-1">
+                                {reservationData.appointment_date && (
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-medium">Fecha de cita:</span> {formatDate(reservationData.appointment_date)}
+                                  </p>
+                                )}
+                                {reservationData.time_slot_id && (
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-medium">Horario:</span> {(() => {
+                                      // Try to get time slot info if available
+                                      const timeSlot = reservationData.time_slot;
+                                      if (timeSlot?.slot_start_time && timeSlot?.slot_end_time) {
+                                        return `${timeSlot.slot_start_time.substring(0, 5)} - ${timeSlot.slot_end_time.substring(0, 5)}`;
+                                      }
+                                      return 'Horario confirmado';
+                                    })()}
+                                  </p>
+                                )}
+                                {reservationData.notes && (
+                                  <p className="text-xs text-gray-600">
+                                    <span className="font-medium">Notas:</span> {reservationData.notes}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            
+                            {item.item_description && !isService && (
+                              <p className="text-xs text-gray-500 mt-1">{item.item_description}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-gray-900">
+                            {formatPrice(item.total_price, item.currency)}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {formatPrice(item.unit_price, item.currency)} c/u
+                          </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium text-gray-900">
-                          {formatPrice(item.total_price, item.currency)}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {formatPrice(item.unit_price, item.currency)} c/u
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

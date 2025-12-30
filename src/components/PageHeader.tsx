@@ -1,5 +1,6 @@
 import React from 'react';
 import NotificationBell from './NotificationBell';
+import SettingsDropdown from './SettingsDropdown';
 
 interface PageHeaderProps {
   title: string;
@@ -14,7 +15,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   subtitle, 
   gradient = "from-purple-600 to-pink-600",
   children,
-  showNotifications = true
+  showNotifications = false
 }) => {
   return (
     <div className={`bg-gradient-to-r ${gradient} rounded-2xl p-6 text-white`}>
@@ -28,6 +29,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         <div className="flex items-center space-x-3">
           {showNotifications && <NotificationBell />}
           {children && children}
+          <SettingsDropdown variant="gradient" />
         </div>
       </div>
     </div>

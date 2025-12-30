@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import { 
   Plus, 
   Save, 
@@ -33,7 +33,6 @@ interface PetFood {
 
 const ManualFeedingForm: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   
   // Form state
   const [selectedPet, setSelectedPet] = useState('');
@@ -84,11 +83,7 @@ const ManualFeedingForm: React.FC = () => {
       setPets(data || []);
     } catch (error) {
       console.error('Error loading pets:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las mascotas",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar las mascotas");
     }
   };
 
@@ -137,11 +132,7 @@ const ManualFeedingForm: React.FC = () => {
       setAvailableFoods(data || []);
     } catch (error) {
       console.error('Error loading foods:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los alimentos",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar los alimentos");
     } finally {
       setLoadingFoods(false);
     }
@@ -151,11 +142,7 @@ const ManualFeedingForm: React.FC = () => {
     e.preventDefault();
     
     if (!selectedPet || !selectedFood || !quantity || !feedingTime || !mealType) {
-      toast({
-        title: "Error",
-        description: "Por favor completa todos los campos obligatorios",
-        variant: "destructive",
-      });
+      toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
 
@@ -194,10 +181,7 @@ const ManualFeedingForm: React.FC = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "¡Éxito!",
-        description: "Alimentación registrada correctamente",
-      });
+      toast.success("Alimentación registrada correctamente");
 
       // Reset form
       setSelectedPet('');
@@ -210,11 +194,7 @@ const ManualFeedingForm: React.FC = () => {
       
     } catch (error) {
       console.error('Error saving manual feeding:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo registrar la alimentación",
-        variant: "destructive",
-      });
+      toast.error("No se pudo registrar la alimentación");
     } finally {
       setLoading(false);
     }

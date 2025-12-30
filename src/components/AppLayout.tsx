@@ -26,6 +26,7 @@ import AdventureLog from './AdventureLog';
 import HealthJournal from './HealthJournal';
 import PetReminders from './PetReminders';
 import Deliveries from './Deliveries';
+import PetJourney from '../pages/PetJourney';
 
 const AppLayout: React.FC = () => {
   const { activeSection } = useAppContext();
@@ -33,6 +34,7 @@ const AppLayout: React.FC = () => {
   
   // Get user role to determine which dashboard and components to show
   const userRole = localStorage.getItem('user_role');
+  console.log('AppLayout: userRole from localStorage:', userRole);
 
   const renderContent = () => {
     // If user is a provider, show ProviderDashboard
@@ -107,6 +109,12 @@ const AppLayout: React.FC = () => {
       if (pathname === '/marketplace/products') {
         return <Marketplace />;
       }
+      if (pathname === '/dashboard') {
+        return <Dashboard />;
+      }
+      if (pathname.startsWith('/pet-journey/')) {
+        return <PetJourney />;
+      }
       
       // Handle old routes for backward compatibility
       switch (activeSection) {
@@ -145,8 +153,8 @@ const AppLayout: React.FC = () => {
   return (
     <NavigationProvider>
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
-        {/* Main Content with bottom padding for mobile navigation */}
-        <main className="pb-20 md:pb-0">
+        {/* Main Content with bottom padding for fixed navigation menu */}
+        <main className="pb-24 md:pb-0">
           {renderContent()}
         </main>
         

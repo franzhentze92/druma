@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { 
   Activity,
@@ -27,7 +27,9 @@ import {
   Waves,
   Trophy,
   Dumbbell,
-  MoreHorizontal
+  MoreHorizontal,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import PageHeader from './PageHeader';
 import { useNavigation } from '@/contexts/NavigationContext';
@@ -55,7 +57,6 @@ interface ExerciseSession {
 
 const Trazabilidad: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const { isMobileMenuOpen, toggleMobileMenu } = useNavigation();
 
   // States
@@ -63,6 +64,8 @@ const Trazabilidad: React.FC = () => {
   const [exerciseSessions, setExerciseSessions] = useState<ExerciseSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPetForAnalytics, setSelectedPetForAnalytics] = useState('all');
+  const [activeTab, setActiveTab] = useState('register');
+  const [editingSession, setEditingSession] = useState<ExerciseSession | null>(null);
 
   // Form states
   const [selectedPet, setSelectedPet] = useState('');
@@ -174,17 +177,31 @@ const Trazabilidad: React.FC = () => {
     setExerciseDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setCalculatedCalories(0);
+    setEditingSession(null);
+  };
+
+  const loadSessionForEdit = (session: ExerciseSession) => {
+    setEditingSession(session);
+    setSelectedPet(session.pet_id);
+    setExerciseType(session.exercise_type);
+    setDuration(session.duration_minutes.toString());
+    setIntensity(session.intensity);
+    setExerciseDate(session.date);
+    setNotes(session.notes || '');
+    setCalculatedCalories(session.calories_burned);
+    // Switch to register tab
+    setActiveTab('register');
+    // Scroll to top of form
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   };
 
   const saveExerciseSession = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedPet || !exerciseType || !duration || !intensity) {
-      toast({
-        title: "Error",
-        description: "Por favor, completa todos los campos obligatorios.",
-        variant: "destructive",
-      });
+      toast.error("Por favor, completa todos los campos obligatorios.");
       return;
     }
 
@@ -206,26 +223,66 @@ const Trazabilidad: React.FC = () => {
         owner_id: user?.id
       };
 
-      const { error } = await supabase
-        .from('exercise_sessions')
-        .insert([exerciseData]);
+      if (editingSession) {
+        // Update existing session
+        const { error } = await supabase
+          .from('exercise_sessions')
+          .update(exerciseData)
+          .eq('id', editingSession.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "¡Éxito!",
-        description: "Sesión de ejercicio registrada correctamente.",
-      });
+        toast.success("¡Sesión de ejercicio actualizada correctamente!");
+      } else {
+        // Create new session
+        const { error } = await supabase
+          .from('exercise_sessions')
+          .insert([exerciseData]);
+
+        if (error) throw error;
+
+        toast.success("¡Sesión de ejercicio registrada correctamente!");
+      }
 
       resetForm();
       loadExerciseSessions();
-    } catch (error) {
+      // Switch back to history tab after saving
+      if (editingSession) {
+        setActiveTab('history');
+      }
+    } catch (error: any) {
       console.error('Error saving exercise session:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo registrar la sesión de ejercicio.",
-        variant: "destructive",
-      });
+      const errorMessage = error?.message || "No se pudo registrar la sesión de ejercicio.";
+      toast.error(
+        editingSession 
+          ? `No se pudo actualizar la sesión de ejercicio. ${errorMessage}`
+          : `No se pudo registrar la sesión de ejercicio. ${errorMessage}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteExerciseSession = async (sessionId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta sesión de ejercicio?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('exercise_sessions')
+        .delete()
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast.success("¡Sesión de ejercicio eliminada correctamente!");
+
+      loadExerciseSessions();
+    } catch (error) {
+      console.error('Error deleting exercise session:', error);
+      toast.error("No se pudo eliminar la sesión de ejercicio.");
     } finally {
       setLoading(false);
     }
@@ -393,7 +450,7 @@ const Trazabilidad: React.FC = () => {
   const chartData = getChartData();
 
     return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       <PageHeader 
         title="Ejercicio"
         subtitle="Registra y gestiona las actividades físicas de tus mascotas"
@@ -405,7 +462,7 @@ const Trazabilidad: React.FC = () => {
         <Activity className="w-8 h-8" />
       </PageHeader>
 
-      <Tabs defaultValue="register" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="register" className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
@@ -426,7 +483,7 @@ const Trazabilidad: React.FC = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
             <Plus className="w-5 h-5 text-orange-600" />
-            Registrar Nueva Sesión de Ejercicio
+            {editingSession ? 'Editar Sesión de Ejercicio' : 'Registrar Nueva Sesión de Ejercicio'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -542,14 +599,29 @@ const Trazabilidad: React.FC = () => {
                         />
                     </div>
 
-            <Button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-            >
-              <Activity className="w-4 h-4 mr-2" />
-              {loading ? 'Registrando...' : 'Registrar Sesión de Ejercicio'}
+                <div className="flex gap-2">
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                  >
+                    <Activity className="w-4 h-4 mr-2" />
+                    {loading 
+                      ? (editingSession ? 'Actualizando...' : 'Registrando...') 
+                      : (editingSession ? 'Actualizar Sesión' : 'Registrar Sesión de Ejercicio')
+                    }
+                  </Button>
+                  {editingSession && (
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={resetForm}
+                      disabled={loading}
+                    >
+                      Cancelar
                     </Button>
+                  )}
+                </div>
                   </form>
                 </CardContent>
               </Card>
@@ -758,38 +830,70 @@ const Trazabilidad: React.FC = () => {
                     const IconComponent = getExerciseTypeIcon(session.exercise_type);
                     const exerciseLabel = getExerciseTypeLabel(session.exercise_type);
                     return (
-                      <div key={session.id} className="border-l-4 border-orange-500 pl-4 py-3 bg-orange-50 rounded-r-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                            <IconComponent className="w-5 h-5 text-orange-600" />
-                              <span className="font-semibold text-gray-800">
-                              {exerciseLabel}
-                              </span>
-                              <Badge variant="outline" className="text-xs">
-                                {session.pet_name}
-                              </Badge>
-                            <Badge className={intensityLevels.find(i => i.value === session.intensity)?.color || 'bg-gray-100 text-gray-800'}>
-                              {intensityLevels.find(i => i.value === session.intensity)?.label || session.intensity}
-                            </Badge>
+                      <div key={session.id} className="border-l-4 border-orange-500 pl-4 py-4 bg-orange-50 rounded-r-lg">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <IconComponent className="w-5 h-5 text-orange-600" />
+                                <span className="font-semibold text-gray-800">
+                                  {exerciseLabel}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {session.pet_name}
+                                </Badge>
+                                <Badge className={intensityLevels.find(i => i.value === session.intensity)?.color || 'bg-gray-100 text-gray-800'}>
+                                  {intensityLevels.find(i => i.value === session.intensity)?.label || session.intensity}
+                                </Badge>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                <Calendar className="w-4 h-4 inline mr-1" />
+                                {new Date(session.date).toLocaleDateString('es-GT', { 
+                                  weekday: 'long', 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </div>
                             </div>
-                            <span className="text-sm text-gray-500">
-                              {new Date(session.date).toLocaleDateString('es-GT')}
-                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => loadSessionForEdit(session)}
+                                className="text-xs"
+                              >
+                                <Edit className="w-3 h-3 mr-1" />
+                                Editar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => deleteExerciseSession(session.id)}
+                                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
+                                disabled={loading}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Eliminar
+                              </Button>
+                            </div>
                           </div>
                           
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                          <div className="flex items-center gap-1">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
+                          <div className="flex items-center gap-1 text-gray-600">
                             <Timer className="w-4 h-4" />
-                            {session.duration_minutes} min
+                            <span className="font-medium">{session.duration_minutes} min</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 text-gray-600">
                             <Zap className="w-4 h-4" />
-                            {session.calories_burned} cal
+                            <span className="font-medium">{session.calories_burned} cal</span>
                           </div>
                         </div>
                           
                           {session.notes && (
-                            <p className="text-sm text-gray-600 mt-2 italic">"{session.notes}"</p>
+                            <div className="mt-2">
+                              <span className="font-medium text-gray-700 text-sm">Notas: </span>
+                              <p className="text-sm text-gray-600 italic inline">"{session.notes}"</p>
+                            </div>
                           )}
                         </div>
                     );

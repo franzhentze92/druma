@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useAdoption';
 import { useUserProfile } from '@/hooks/useSettings';
 import { useQueryClient } from '@tanstack/react-query';
+import SettingsDropdown from './SettingsDropdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -112,6 +113,23 @@ const ShelterDashboard: React.FC = () => {
       // ignore storage errors
     }
   };
+
+  // Listen for tab change events from SettingsDropdown
+  useEffect(() => {
+    const handleTabChangeEvent = (event: CustomEvent) => {
+      setActiveTab(event.detail);
+      try {
+        localStorage.setItem('shelterDashboardActiveTab', event.detail);
+      } catch {
+        // ignore storage errors
+      }
+    };
+
+    window.addEventListener('shelterDashboardTabChange', handleTabChangeEvent as EventListener);
+    return () => {
+      window.removeEventListener('shelterDashboardTabChange', handleTabChangeEvent as EventListener);
+    };
+  }, []);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
   const [showAddPet, setShowAddPet] = useState(false);
   const [showAddPetForm, setShowAddPetForm] = useState(false);
@@ -431,9 +449,9 @@ const ShelterDashboard: React.FC = () => {
         .from('shelters')
         .select('*')
         .eq('owner_id', user.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle no results gracefully
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      if (checkError) {
         console.error('Error checking for existing shelter:', checkError);
         toast({ title: 'Error', description: `Error al verificar el albergue existente: ${checkError.message}`, variant: 'destructive' });
         return;
@@ -494,32 +512,12 @@ const ShelterDashboard: React.FC = () => {
         console.log('Shelter updated successfully');
       }
 
-      // Try to update shelter_profiles table if it exists
-      if (shelterId) {
-        try {
-          const { error: profileError } = await supabase
-            .from('shelter_profiles')
-            .upsert({
-              shelter_id: shelterId,
-              mission_statement: shelterForm.mission_statement,
-              years_experience: shelterForm.years_experience || 0,
-              total_volunteers: shelterForm.total_volunteers || 0
-            });
-
-          if (profileError) {
-            console.log('shelter_profiles table might not exist, continuing with basic update');
-          } else {
-            console.log('Shelter profile updated successfully');
-          }
-        } catch (profileError) {
-          console.log('shelter_profiles table might not exist, continuing with basic update');
-        }
-      }
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['shelter', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['shelters'] });
 
       toast({ title: 'Perfil actualizado', description: 'Los cambios fueron guardados correctamente' });
       
-      // Update the local state instead of refreshing
-      // This will keep the form data visible
       console.log('Profile saved successfully, form data preserved');
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -1191,6 +1189,7 @@ const ShelterDashboard: React.FC = () => {
               <Building2 className="w-4 h-4 mr-2" />
               {currentShelter.name}
             </Badge>
+            <SettingsDropdown variant="default" />
             
             {/* Database Connection Status */}
             <div className="flex items-center gap-2">
@@ -2580,7 +2579,7 @@ const ShelterDashboard: React.FC = () => {
                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                        <Image className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                        <p className="text-sm text-gray-600 mb-2">Arrastra una imagen aquí o haz clic para seleccionar</p>
-                       <p className="text-xs text-gray-500">PNG, JPG, GIF hasta 5MB</p>
+                       <p className="text-xs text-gray-500">PNG, JPG, GIF hasta 50MB</p>
                        <div>
                          <input
                            type="file"

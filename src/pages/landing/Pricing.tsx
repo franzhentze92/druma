@@ -286,7 +286,7 @@ export const Pricing: React.FC = () => {
             ¿Listo para Comenzar?
           </h2>
           <p className="text-xl text-blue-100 mb-8">
-            Únete a miles de familias que ya confían en Druma para 
+            Únete a miles de familias que ya confían en PetHub para 
             el cuidado de sus mascotas.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

@@ -100,7 +100,7 @@ export const Home: React.FC = () => {
           <div className="text-center">
             {/* Badge */}
             <Badge variant="secondary" className="mb-6 px-4 py-2 text-sm font-medium bg-purple-100 text-purple-800 border-purple-200">
-              🎉 Más de 50,000 mascotas ya confían en Druma
+              🎉 Más de 50,000 mascotas ya confían en PetHub
             </Badge>
             
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 mb-6 md:mb-8 leading-tight px-4">
@@ -111,7 +111,7 @@ export const Home: React.FC = () => {
             </h1>
             
             <p className="text-lg sm:text-xl md:text-2xl text-gray-600 mb-8 md:mb-10 max-w-4xl mx-auto leading-relaxed px-4">
-              Druma revoluciona el cuidado animal conectando dueños, veterinarios y proveedores 
+              PetHub revoluciona el cuidado animal conectando dueños, veterinarios y proveedores 
               en una comunidad comprometida con el bienestar. Desde trazabilidad de salud hasta 
               adopción responsable, todo en un solo lugar con 6 módulos especializados.
             </p>
@@ -435,7 +435,7 @@ export const Home: React.FC = () => {
               ✨ Características Destacadas
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 md:mb-6 px-4">
-              ¿Por qué elegir Druma?
+              ¿Por qué elegir PetHub?
             </h2>
             <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto px-4">
               Ofrecemos las herramientas más avanzadas y la comunidad más comprometida 
@@ -494,7 +494,7 @@ export const Home: React.FC = () => {
             ¿Listo para Comenzar?
           </h2>
           <p className="text-lg md:text-xl lg:text-2xl text-purple-100 mb-8 md:mb-10 max-w-3xl mx-auto leading-relaxed px-4">
-            Únete a miles de familias que ya confían en Druma para el cuidado de sus mascotas.
+            Únete a miles de familias que ya confían en PetHub para el cuidado de sus mascotas.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center px-4">

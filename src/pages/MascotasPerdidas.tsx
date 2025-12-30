@@ -62,7 +62,7 @@ const MascotasPerdidas: React.FC = () => {
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
       {/* Header */}
       <PageHeader 
         title="Mascotas Perdidas"

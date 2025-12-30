@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { useToast } from '../hooks/use-toast';
+import { toast } from 'sonner';
 import NutritionProgressChart from './NutritionProgressChart';
 import { 
   BarChart3, 
@@ -64,7 +64,6 @@ interface NutritionStats {
 
 const NutritionAnalytics: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   
   const [pets, setPets] = useState<Pet[]>([]);
   const [nutritionSessions, setNutritionSessions] = useState<NutritionSession[]>([]);
@@ -97,11 +96,7 @@ const NutritionAnalytics: React.FC = () => {
       setPets(data || []);
     } catch (error) {
       console.error('Error loading pets:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las mascotas",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar las mascotas");
     }
   };
 
@@ -127,11 +122,7 @@ const NutritionAnalytics: React.FC = () => {
       setNutritionSessions(sessionsWithPetNames);
     } catch (error) {
       console.error('Error loading nutrition sessions:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las sesiones de alimentación",
-        variant: "destructive",
-      });
+      toast.error("No se pudieron cargar las sesiones de alimentación");
     } finally {
       setLoading(false);
     }

@@ -89,7 +89,7 @@ export const Contact: React.FC = () => {
     {
       icon: Mail,
       title: 'Email',
-      details: ['info@druma.gt', 'soporte@druma.gt'],
+      details: ['info@pethub.gt', 'soporte@pethub.gt'],
       color: 'from-blue-500 to-purple-600',
       bgColor: 'bg-gradient-to-br from-blue-50 to-purple-100'
     },
@@ -380,7 +380,7 @@ export const Contact: React.FC = () => {
                         allowFullScreen
                         loading="lazy"
                         referrerPolicy="no-referrer-when-downgrade"
-                        title="Druma Office Location - Zona 10, Guatemala City"
+                        title="PetHub Office Location - Zona 10, Guatemala City"
                       />
                     </div>
                     <div className="mt-4 p-4 bg-gradient-to-br from-green-50 to-teal-100 rounded-lg">
@@ -431,13 +431,13 @@ export const Contact: React.FC = () => {
         </div>
       </section>
 
-      {/* Druma Features Section */}
+      {/* PetHub Features Section */}
       <section className="py-16 bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-800 px-4 py-2 rounded-full mb-6">
               <Heart className="w-4 h-4" />
-              <span className="font-medium">¿Por qué elegir Druma?</span>
+              <span className="font-medium">¿Por qué elegir PetHub?</span>
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
               La plataforma integral para el cuidado de mascotas

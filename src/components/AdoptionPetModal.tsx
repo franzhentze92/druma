@@ -71,7 +71,7 @@ const AdoptionPetModal: React.FC<AdoptionPetModalProps> = ({ isOpen, onClose, ow
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) return alert('Máximo 5MB')
+    if (file.size > 50 * 1024 * 1024) return alert('Máximo 50MB')
 
     setUploading(true)
     try {

@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Calendar, DollarSign, Info, AlertCircle } from 'lucide-react';
 import { ProviderService, ProviderServiceAvailability, ProviderServiceTimeSlot } from '@/hooks/useProvider';
+import { getServicePricingConfig, hasServiceSizePricing } from '@/config/servicePricing';
+import { ServiceImageUpload } from './ServiceImageUpload';
 
 interface ProviderServiceModalProps {
   isOpen: boolean;
@@ -68,7 +70,11 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
     service_category: '',
     description: '',
     detailed_description: '',
-    price: '',
+    price: '', // Precio general (opcional)
+    price_small: '',
+    price_medium: '',
+    price_large: '',
+    price_extra_large: '',
     currency: 'GTQ',
     duration_minutes: '',
     preparation_instructions: '',
@@ -76,6 +82,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
     max_advance_booking_days: '30',
     min_advance_booking_hours: '2',
     is_active: true,
+    service_image_url: '',
   });
 
   const [availability, setAvailability] = useState<ProviderServiceAvailability[]>([]);
@@ -89,7 +96,11 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
         service_category: service.service_category,
         description: service.description || '',
         detailed_description: service.detailed_description || '',
-        price: service.price.toString(),
+        price: service.price?.toString() || '',
+        price_small: service.price_small?.toString() || '',
+        price_medium: service.price_medium?.toString() || '',
+        price_large: service.price_large?.toString() || '',
+        price_extra_large: service.price_extra_large?.toString() || '',
         currency: service.currency || 'GTQ',
         duration_minutes: service.duration_minutes.toString(),
         preparation_instructions: service.preparation_instructions || '',
@@ -97,6 +108,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
         max_advance_booking_days: service.max_advance_booking_days?.toString() || '30',
         min_advance_booking_hours: service.min_advance_booking_hours?.toString() || '2',
         is_active: service.is_active,
+        service_image_url: service.service_image_url || '',
       });
 
       // Load availability and time slots for existing service (only if functions are provided)
@@ -141,6 +153,10 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
         description: '',
         detailed_description: '',
         price: '',
+        price_small: '',
+        price_medium: '',
+        price_large: '',
+        price_extra_large: '',
         currency: 'GTQ',
         duration_minutes: '',
         preparation_instructions: '',
@@ -148,6 +164,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
         max_advance_booking_days: '30',
         min_advance_booking_hours: '2',
         is_active: true,
+        service_image_url: '',
       });
       setAvailability([]);
       setTimeSlots([]);
@@ -169,17 +186,94 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
       if (!formData.description.trim()) {
         throw new Error('La descripción del servicio es requerida');
       }
-      if (!formData.price || parseFloat(formData.price) <= 0) {
-        throw new Error('El precio del servicio debe ser mayor a 0');
+      // Validate pricing based on category
+      const pricingConfig = getServicePricingConfig(formData.service_category);
+      const hasSizePricing = pricingConfig.system === 'dog_size';
+      
+      if (hasSizePricing) {
+        // For size-based pricing, at least one size price must be set
+        const hasGeneralPrice = formData.price && parseFloat(formData.price) > 0;
+        const hasSizePrices = formData.price_small || formData.price_medium || 
+                              formData.price_large || formData.price_extra_large;
+        
+        if (!hasGeneralPrice && !hasSizePrices) {
+          throw new Error('Debes definir un precio general o al menos un precio por tamaño');
+        }
+      } else {
+        // For single pricing, general price is required
+        if (!formData.price || parseFloat(formData.price) <= 0) {
+          throw new Error('El precio del servicio debe ser mayor a 0');
+        }
+      }
+
+      // Transform availability data to remove id, service_id, and created_at
+      // Ensure day_of_week is a number and times are in correct format
+      const availabilityData = availability.map(item => {
+        const dayOfWeek = typeof item.day_of_week === 'string' ? parseInt(item.day_of_week, 10) : item.day_of_week;
+        const startTime = item.start_time ? item.start_time.substring(0, 5) : '09:00';
+        const endTime = item.end_time ? item.end_time.substring(0, 5) : '17:00';
+        
+        return {
+          day_of_week: dayOfWeek,
+          start_time: startTime,
+          end_time: endTime,
+          is_available: item.is_available !== false // Default to true if not set
+        };
+      });
+
+      // Transform time slots data to remove id, service_id, and created_at
+      // Ensure day_of_week is a number and times are in correct format
+      const timeSlotsData = timeSlots.map(item => {
+        const dayOfWeek = typeof item.day_of_week === 'string' ? parseInt(item.day_of_week, 10) : item.day_of_week;
+        const slotStartTime = item.slot_start_time ? item.slot_start_time.substring(0, 5) : '09:00';
+        const slotEndTime = item.slot_end_time ? item.slot_end_time.substring(0, 5) : '10:00';
+        
+        return {
+          day_of_week: dayOfWeek,
+          slot_start_time: slotStartTime,
+          slot_end_time: slotEndTime,
+          is_available: item.is_available !== false, // Default to true if not set
+          max_bookings_per_slot: item.max_bookings_per_slot || 1
+        };
+      });
+
+      console.log('=== SAVING SERVICE AVAILABILITY ===');
+      console.log('Raw availability state:', availability);
+      console.log('Raw availability length:', availability.length);
+      console.log('Transformed availability data:', availabilityData);
+      console.log('Transformed availability length:', availabilityData.length);
+      console.log('Raw time slots state:', timeSlots);
+      console.log('Raw time slots length:', timeSlots.length);
+      console.log('Transformed time slots data:', timeSlotsData);
+      console.log('Transformed time slots length:', timeSlotsData.length);
+      console.log('===================================');
+
+      // Validate that we have data to save
+      if (availability.length === 0 && timeSlots.length === 0) {
+        console.warn('⚠️ WARNING: No availability or time slots configured for this service!');
       }
 
       // Save the service
+      console.log('Calling onSave with:', {
+        serviceData: {
+          service_name: formData.service_name,
+          service_category: formData.service_category,
+          // ... other fields
+        },
+        availability: availabilityData,
+        timeSlots: timeSlotsData
+      });
+      
       await onSave({
         service_name: formData.service_name,
         service_category: formData.service_category,
         description: formData.description,
         detailed_description: formData.detailed_description,
-        price: parseFloat(formData.price) || 0,
+        price: formData.price ? parseFloat(formData.price) : 0,
+        price_small: formData.price_small ? parseFloat(formData.price_small) : null,
+        price_medium: formData.price_medium ? parseFloat(formData.price_medium) : null,
+        price_large: formData.price_large ? parseFloat(formData.price_large) : null,
+        price_extra_large: formData.price_extra_large ? parseFloat(formData.price_extra_large) : null,
         currency: formData.currency,
         duration_minutes: parseInt(formData.duration_minutes) || 0,
         preparation_instructions: formData.preparation_instructions,
@@ -187,7 +281,8 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
         max_advance_booking_days: parseInt(formData.max_advance_booking_days) || 30,
         min_advance_booking_hours: parseInt(formData.min_advance_booking_hours) || 2,
         is_active: formData.is_active,
-      }, availability, timeSlots);
+        service_image_url: formData.service_image_url || undefined,
+      }, availabilityData, timeSlotsData);
       
       // Success - modal will close and parent will show success toast
       onClose();
@@ -299,7 +394,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[10000]">
                       {SERVICE_CATEGORIES.map((category) => (
                         <SelectItem key={category.value} value={category.value}>
                           <span className="mr-2">{category.icon}</span>
@@ -309,6 +404,14 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div>
+                <ServiceImageUpload
+                  imageUrl={formData.service_image_url}
+                  onImageUpload={(url) => handleInputChange('service_image_url', url || '')}
+                  disabled={loading}
+                />
               </div>
 
               <div>
@@ -323,25 +426,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="service-price">Precio (Q.) *</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Q.</span>
-                    <Input
-                      id="service-price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.price}
-                      onChange={(e) => handleInputChange('price', e.target.value)}
-                      placeholder="0.00"
-                      className="pl-8"
-                      required
-                    />
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="service-duration">Duración (min) *</Label>
                   <Input
@@ -368,6 +453,94 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                   </Select>
                 </div>
               </div>
+
+              {/* Pricing Section - Dynamic based on category */}
+              {(() => {
+                const pricingConfig = getServicePricingConfig(formData.service_category);
+                const hasSizePricing = pricingConfig.system === 'dog_size';
+                const currencySymbol = formData.currency === 'GTQ' ? 'Q.' : '$';
+
+                if (hasSizePricing && pricingConfig.sizeOptions) {
+                  return (
+                    <div className="space-y-4">
+                      <div className="space-y-3">
+                        <Label className="text-base font-semibold">Precio General (Opcional)</Label>
+                        <p className="text-sm text-gray-600 mb-3">Usa este campo si el servicio no requiere diferenciación por tamaño de perro.</p>
+                        <div className="relative max-w-xs">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                            {currencySymbol}
+                          </span>
+                          <Input
+                            id="service-price-general"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={formData.price}
+                            onChange={(e) => handleInputChange('price', e.target.value)}
+                            placeholder="0.00"
+                            className="pl-8"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-base font-semibold">Precios por Tamaño de Perro</Label>
+                        <p className="text-sm text-gray-600 mb-3">Define precios específicos para cada tamaño de perro.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {pricingConfig.sizeOptions.map((size) => {
+                            const fieldName = `price_${size.key}` as keyof typeof formData;
+                            return (
+                              <div key={size.key} className="space-y-2">
+                                <Label htmlFor={`service-price-${size.key}`}>
+                                  {size.label} {size.description && `(${size.description})`}
+                                </Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                    {currencySymbol}
+                                  </span>
+                                  <Input
+                                    id={`service-price-${size.key}`}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={formData[fieldName] as string}
+                                    onChange={(e) => handleInputChange(fieldName, e.target.value)}
+                                    placeholder="0.00"
+                                    className="pl-8"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  // Single price
+                  return (
+                    <div>
+                      <Label htmlFor="service-price">Precio ({currencySymbol}) *</Label>
+                      <div className="relative max-w-xs">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                          {currencySymbol}
+                        </span>
+                        <Input
+                          id="service-price"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.price}
+                          onChange={(e) => handleInputChange('price', e.target.value)}
+                          placeholder="0.00"
+                          className="pl-8"
+                          required
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+              })()}
 
               <div className="flex items-center space-x-2">
                 <Switch
@@ -453,7 +626,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                               <SelectTrigger className="w-24">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="z-[10000]">
                                 {TIME_SLOTS.map((time) => (
                                   <SelectItem key={time} value={time}>{time}</SelectItem>
                                 ))}
@@ -464,7 +637,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                               <SelectTrigger className="w-24">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="z-[10000]">
                                 {TIME_SLOTS.map((time) => (
                                   <SelectItem key={time} value={time}>{time}</SelectItem>
                                 ))}
@@ -516,7 +689,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                               <SelectTrigger className="w-24">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="z-[10000]">
                                 {TIME_SLOTS.map((time) => (
                                   <SelectItem key={time} value={time}>{time}</SelectItem>
                                 ))}
@@ -527,7 +700,7 @@ const ProviderServiceModal: React.FC<ProviderServiceModalProps> = ({
                               <SelectTrigger className="w-24">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="z-[10000]">
                                 {TIME_SLOTS.map((time) => (
                                   <SelectItem key={time} value={time}>{time}</SelectItem>
                                 ))}

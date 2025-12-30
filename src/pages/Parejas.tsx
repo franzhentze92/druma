@@ -21,7 +21,8 @@ import {
   Check,
   Clock,
   Users,
-  Send
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,6 +82,7 @@ const Parejas: React.FC = () => {
   const [filterAge, setFilterAge] = useState<string>('all');
   const [selectedPetDetails, setSelectedPetDetails] = useState<Pet | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [isViewingFromRequest, setIsViewingFromRequest] = useState(false);
   const [receivedRequests, setReceivedRequests] = useState<BreedingMatch[]>([]);
   const [sentRequests, setSentRequests] = useState<BreedingMatch[]>([]);
   const [showPetSelectionModal, setShowPetSelectionModal] = useState(false);
@@ -102,6 +104,81 @@ const Parejas: React.FC = () => {
     }
   }, [user]);
 
+  // Subscribe to real-time updates for breeding_matches
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('Setting up realtime subscription for breeding_matches');
+    
+    // Create two subscriptions - one for owner_id and one for partner_owner_id
+    // (Supabase Realtime doesn't support OR in filters)
+    const channel1 = supabase
+      .channel('breeding_matches_owner')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'breeding_matches',
+          filter: `owner_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Breeding match changed (owner):', payload);
+          loadData();
+        }
+      )
+      .subscribe();
+
+    const channel2 = supabase
+      .channel('breeding_matches_partner')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'breeding_matches',
+          filter: `partner_owner_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Breeding match changed (partner):', payload);
+          loadData();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      console.log('Cleaning up realtime subscriptions');
+      supabase.removeChannel(channel1);
+      supabase.removeChannel(channel2);
+    };
+  }, [user]);
+
+  // Also poll for updates every 30 seconds as a fallback
+  useEffect(() => {
+    if (!user) return;
+
+    const intervalId = setInterval(() => {
+      console.log('Polling for breeding matches updates...');
+      loadData();
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [user]);
+
+  // Refresh data when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        console.log('Page became visible, refreshing data...');
+        loadData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -115,43 +192,125 @@ const Parejas: React.FC = () => {
       if (petsError) throw petsError;
       setMyPets(petsData || []);
 
-      // Load available pets for breeding
+      // Load available pets for breeding - SIMPLIFIED: Show all pets from other users marked for breeding
       try {
         console.log('Loading available pets for breeding...');
+        console.log('Current user ID:', user?.id);
         
-        // First, let's try a simple query to see all pets
-        const { data: allPetsData, error: allPetsError } = await supabase
-          .from('pets')
-          .select('*');
-        
-        console.log('All pets:', allPetsData);
-        console.log('All pets error:', allPetsError);
-        
-        // Now try the breeding query - first without the relationship
-        const { data: availableData, error: availableError } = await supabase
-          .from('pets')
-          .select('*')
-          .eq('available_for_breeding', true);
-
-        console.log('Available pets data:', availableData);
-        console.log('Available pets error:', availableError);
-
-        if (availableError) {
-          // Check if it's the column doesn't exist error
-          if (availableError.code === '42703') {
-            console.log('available_for_breeding column does not exist yet. Please run the database setup script.');
-            toast.error('La columna de disponibilidad para reproducción no existe. Ejecuta el esquema de base de datos primero.');
-            setAvailablePets([]);
-          } else {
-            throw availableError;
-          }
+        if (!user?.id) {
+          console.log('No user ID, cannot load available pets');
+          setAvailablePets([]);
         } else {
-          console.log('Setting available pets:', availableData);
-          setAvailablePets(availableData || []);
+          // First, let's check ALL pets to see what we have (this might be blocked by RLS)
+          const { data: allPetsCheck, error: allPetsError } = await supabase
+            .from('pets')
+            .select('id, name, owner_id, available_for_breeding');
+          
+          console.log('=== DEBUG: All pets in database (may be filtered by RLS) ===');
+          console.log('Total pets visible:', allPetsCheck?.length || 0);
+          console.log('All pets data:', allPetsCheck);
+          console.log('All pets error:', allPetsError);
+          
+          // Check pets with available_for_breeding = true (all users - may be filtered by RLS)
+          const { data: allBreedingPets, error: allBreedingError } = await supabase
+            .from('pets')
+            .select('id, name, owner_id, available_for_breeding')
+            .eq('available_for_breeding', true);
+          
+          console.log('=== DEBUG: Pets with available_for_breeding = true ===');
+          console.log('Count:', allBreedingPets?.length || 0);
+          console.log('Data:', allBreedingPets);
+          console.log('Error:', allBreedingError);
+          
+          // Check pets from other users (regardless of breeding status) - This is the key test
+          const { data: otherUsersPets, error: otherUsersError } = await supabase
+            .from('pets')
+            .select('id, name, owner_id, available_for_breeding')
+            .neq('owner_id', user.id);
+          
+          console.log('=== DEBUG: Pets from other users (CRITICAL TEST) ===');
+          console.log('Count:', otherUsersPets?.length || 0);
+          console.log('Data:', otherUsersPets);
+          console.log('Error:', otherUsersError);
+          
+          if (otherUsersError) {
+            console.error('❌ ERROR: Cannot query pets from other users. This is likely an RLS (Row Level Security) issue.');
+            console.error('RLS Error details:', otherUsersError);
+          }
+          
+          if ((otherUsersPets?.length || 0) === 0 && !otherUsersError) {
+            console.warn('⚠️ WARNING: Query succeeded but returned 0 pets from other users.');
+            console.warn('This could mean:');
+            console.warn('1. RLS is blocking access to other users pets');
+            console.warn('2. There are truly no pets from other users in the database');
+            console.warn('3. All pets in the database belong to the current user');
+          }
+          
+          // Now the actual query: Get all pets where available_for_breeding is true AND owner_id is NOT the current user
+          let availableData = null;
+          let availableError = null;
+          
+          // Try the standard query first
+          const result1 = await supabase
+            .from('pets')
+            .select('*')
+            .eq('available_for_breeding', true)
+            .neq('owner_id', user.id);
+          
+          availableData = result1.data;
+          availableError = result1.error;
+          
+          // If no results and no error, it might be RLS blocking
+          if ((availableData?.length || 0) === 0 && !availableError) {
+            console.log('⚠️ No pets found. Possible RLS issue. Trying alternative query...');
+            
+            // Try querying all pets first, then filter in JavaScript
+            const allPetsResult = await supabase
+              .from('pets')
+              .select('*');
+            
+            console.log('All pets query result:', allPetsResult.data);
+            console.log('All pets query error:', allPetsResult.error);
+            
+            if (allPetsResult.data) {
+              // Filter in JavaScript
+              const filtered = allPetsResult.data.filter(pet => 
+                pet.available_for_breeding === true && 
+                pet.owner_id !== user.id
+              );
+              console.log('Filtered in JavaScript:', filtered);
+              availableData = filtered;
+            }
+          }
+
+          console.log('=== Query result - Available pets ===');
+          console.log('Available pets:', availableData);
+          console.log('Count:', availableData?.length || 0);
+          console.log('Error:', availableError);
+
+          if (availableError) {
+            // Check if it's the column doesn't exist error
+            if (availableError.code === '42703') {
+              console.log('available_for_breeding column does not exist yet.');
+              toast.error('La columna de disponibilidad para reproducción no existe.');
+              setAvailablePets([]);
+            } else {
+              console.error('Error loading available pets:', availableError);
+              toast.error(`Error al cargar mascotas: ${availableError.message}`);
+              setAvailablePets([]);
+            }
+          } else {
+            console.log('Successfully loaded available pets:', availableData);
+            // Filter out any pets that might have owner_id matching current user (double check)
+            const filteredData = (availableData || []).filter(pet => pet.owner_id !== user.id);
+            console.log('After filtering own pets:', filteredData);
+            console.log('Final count:', filteredData.length);
+            setAvailablePets(filteredData);
+          }
         }
       } catch (error: any) {
         console.error('Error loading available pets:', error);
-        toast.error('Error al cargar mascotas disponibles');
+        toast.error(`Error al cargar mascotas disponibles: ${error.message}`);
         setAvailablePets([]);
       }
 
@@ -246,7 +405,9 @@ const Parejas: React.FC = () => {
 
   const sendLoveRequest = async (myPet: Pet, targetPet: Pet) => {
     try {
-      const { error } = await supabase
+      console.log('Sending love request:', { myPet: myPet.name, targetPet: targetPet.name });
+      
+      const { data, error } = await supabase
         .from('breeding_matches')
         .insert({
           pet_id: myPet.id,
@@ -254,15 +415,26 @@ const Parejas: React.FC = () => {
           owner_id: user?.id,
           partner_owner_id: targetPet.owner_id,
           status: 'pending'
-        });
+        })
+        .select();
+
+      console.log('Love request insert result:', { data, error });
 
       if (error) {
+        console.error('Error inserting love request:', error);
         if (error.code === '42P01') {
           toast.error('La tabla de parejas no existe. Por favor, ejecuta el esquema de base de datos primero.');
+        } else if (error.code === '23505') {
+          // Duplicate key error - request already exists
+          toast.info('💕 Ya has enviado una solicitud de amor a esta mascota', {
+            description: 'Espera la respuesta del dueño.',
+            duration: 4000,
+          });
         } else {
           throw error;
         }
       } else {
+        console.log('Love request sent successfully!');
         toast.success(`💕 Solicitud de amor enviada exitosamente!`, {
           description: `${myPet.name} ha enviado una solicitud de amor a ${targetPet.name}. Espera la respuesta del dueño.`,
           duration: 5000,
@@ -270,12 +442,12 @@ const Parejas: React.FC = () => {
         // Remove from available pets to avoid duplicate requests
         setAvailablePets(prev => prev.filter(p => p.id !== targetPet.id));
         // Reload data to update requests
-        loadData();
+        await loadData();
       }
     } catch (error: any) {
       console.error('Error sending love request:', error);
       toast.error('❌ Error al enviar la solicitud de amor', {
-        description: 'No se pudo enviar la solicitud. Intenta nuevamente o verifica tu conexión.',
+        description: error.message || 'No se pudo enviar la solicitud. Intenta nuevamente o verifica tu conexión.',
         duration: 4000,
       });
     }
@@ -288,7 +460,25 @@ const Parejas: React.FC = () => {
 
   const handleViewDetails = (pet: Pet) => {
     setSelectedPetDetails(pet);
+    setIsViewingFromRequest(false);
     setShowDetailsModal(true);
+  };
+
+  const handleViewRequestDetails = (request: BreedingMatch) => {
+    // Prepare the pet with owner information from the request
+    if (request.potential_partner) {
+      const petWithOwner: Pet = {
+        ...request.potential_partner,
+        owner: request.partner_owner ? {
+          id: request.partner_owner.id,
+          full_name: request.partner_owner.full_name,
+          phone: request.partner_owner.phone
+        } : request.potential_partner.owner
+      };
+      setSelectedPetDetails(petWithOwner);
+      setIsViewingFromRequest(true);
+      setShowDetailsModal(true);
+    }
   };
 
 
@@ -340,8 +530,17 @@ const Parejas: React.FC = () => {
     setShowChatModal(true);
   };
 
+  // Show all available pets without filters for now (as requested)
   const filteredPets = availablePets.filter(pet => {
-    const matchesSearch = pet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    // Always exclude user's own pets (double check)
+    if (pet.owner_id === user?.id) {
+      console.log('Filtering out own pet:', pet.name, pet.owner_id);
+      return false;
+    }
+    
+    // Apply filters only if they are not 'all'
+    const matchesSearch = !searchTerm || 
+                         pet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          pet.breed.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSpecies = filterSpecies === 'all' || pet.species === filterSpecies;
     const matchesBreed = filterBreed === 'all' || pet.breed === filterBreed;
@@ -353,6 +552,9 @@ const Parejas: React.FC = () => {
 
     return matchesSearch && matchesSpecies && matchesBreed && matchesGender && matchesAge;
   });
+  
+  console.log('Filtered pets count:', filteredPets.length);
+  console.log('Available pets count:', availablePets.length);
 
   const pendingMatches = myMatches.filter(match => match.status === 'pending');
   const acceptedMatches = myMatches.filter(match => match.status === 'accepted');
@@ -431,7 +633,7 @@ const Parejas: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 pb-40 md:pb-6">
       {/* Header */}
       <PageHeader 
         title="Parejas"
@@ -450,7 +652,6 @@ const Parejas: React.FC = () => {
             { id: 'pet-tinder', label: 'Catálogo', icon: Heart, color: 'from-pink-500 to-rose-500' },
             { id: 'solicitudes-enviadas', label: 'Enviadas', icon: Send, color: 'from-blue-500 to-cyan-500' },
             { id: 'solicitudes-recibidas', label: 'Recibidas', icon: MessageCircle, color: 'from-green-500 to-emerald-500' },
-            { id: 'mis-parejas', label: 'Parejas', icon: Users, color: 'from-purple-500 to-indigo-500' },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -472,7 +673,7 @@ const Parejas: React.FC = () => {
 
         {/* Tab Content */}
         {activeTab === 'pet-tinder' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
           {/* Filters */}
           <Card>
                 <CardHeader>
@@ -627,10 +828,27 @@ const Parejas: React.FC = () => {
                 <Card>
                   <CardContent className="p-12 text-center">
                     <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hay mascotas disponibles</h3>
-                    <p className="text-gray-600">
-                      No se encontraron mascotas compatibles con los filtros aplicados.
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {availablePets.length === 0 
+                        ? 'No hay mascotas disponibles para reproducción' 
+                        : 'No se encontraron mascotas compatibles con los filtros aplicados'}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      {availablePets.length === 0
+                        ? 'Actualmente no hay mascotas de otros usuarios marcadas como disponibles para reproducción en la base de datos. Solo se muestran mascotas de otros usuarios, no las tuyas.'
+                        : 'Intenta ajustar los filtros de búsqueda para ver más resultados.'}
                     </p>
+                    {availablePets.length === 0 && (
+                      <div className="text-sm text-gray-500 space-y-2">
+                        <p>💡 <strong>Nota:</strong> Esta sección solo muestra mascotas de otros usuarios.</p>
+                        <p>Para ver mascotas aquí, otros usuarios deben:</p>
+                        <ul className="list-disc list-inside text-left max-w-md mx-auto mt-2 space-y-1">
+                          <li>Crear una cuenta en PetHub</li>
+                          <li>Registrar sus mascotas</li>
+                          <li>Marcarlas como disponibles para reproducción</li>
+                        </ul>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -639,7 +857,24 @@ const Parejas: React.FC = () => {
 
         {/* Solicitudes Recibidas Tab */}
         {activeTab === 'solicitudes-recibidas' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
+          {/* Refresh Button */}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                toast.info('Actualizando solicitudes...');
+                loadData();
+              }}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Actualizar
+            </Button>
+          </div>
+
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Card>
@@ -756,7 +991,7 @@ const Parejas: React.FC = () => {
                 <Card key={request.id} className="overflow-hidden">
                   <CardContent className="p-6">
                     <div className="flex items-start space-x-4">
-                      {/* Pet Image */}
+                      {/* Pet Image - Show the pet that sent the request (other user's pet) */}
                       <div className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
                         {request.pet?.image_url ? (
                           <img
@@ -776,10 +1011,10 @@ const Parejas: React.FC = () => {
                         <div className="flex items-start justify-between">
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900">
-                              Solicitud para {request.pet?.name}
+                              Solicitud para {request.potential_partner?.name}
                             </h3>
                             <p className="text-sm text-gray-600">
-                              De {request.potential_partner?.name} ({request.potential_partner?.breed})
+                              De {request.pet?.name} ({request.pet?.breed})
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
                               Enviado el {new Date(request.created_at).toLocaleDateString('es-ES')}
@@ -807,26 +1042,38 @@ const Parejas: React.FC = () => {
 
                         {/* Action Buttons */}
                         {request.status === 'pending' && (
-                          <div className="flex space-x-3 mt-4">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => handleAcceptMatch(request.id)}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <Check className="w-4 h-4 mr-1" />
-                              Aceptar
-                            </Button>
+                          <div className="flex flex-col sm:flex-row gap-3 mt-4">
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => handleRejectMatch(request.id)}
-                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              onClick={() => handleViewRequestDetails(request)}
+                              className="border-blue-300 text-blue-600 hover:bg-blue-50"
                             >
-                              <X className="w-4 h-4 mr-1" />
-                              Rechazar
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver Detalles
                             </Button>
+                            <div className="flex space-x-3">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleAcceptMatch(request.id)}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Check className="w-4 h-4 mr-1" />
+                                Aceptar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRejectMatch(request.id)}
+                                className="border-red-300 text-red-600 hover:bg-red-50"
+                              >
+                                <X className="w-4 h-4 mr-1" />
+                                Rechazar
+                              </Button>
+                            </div>
                           </div>
                         )}
 
@@ -855,7 +1102,24 @@ const Parejas: React.FC = () => {
 
         {/* Solicitudes Enviadas Tab */}
         {activeTab === 'solicitudes-enviadas' && (
-          <div className="space-y-6">
+          <div className="space-y-6" style={{ paddingBottom: '100px' }}>
+          {/* Refresh Button */}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                toast.info('Actualizando solicitudes...');
+                loadData();
+              }}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Actualizar
+            </Button>
+          </div>
+
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <Card>
@@ -972,12 +1236,12 @@ const Parejas: React.FC = () => {
                 <Card key={request.id} className="overflow-hidden">
                   <CardContent className="p-6">
                     <div className="flex items-start space-x-4">
-                      {/* My Pet Image */}
+                      {/* Target Pet Image (the pet we sent the request to) */}
                       <div className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
-                        {request.pet?.image_url ? (
+                        {request.potential_partner?.image_url ? (
                           <img
-                            src={request.pet.image_url}
-                            alt={request.pet.name}
+                            src={request.potential_partner.image_url}
+                            alt={request.potential_partner.name}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -1032,12 +1296,25 @@ const Parejas: React.FC = () => {
                         )}
 
                         {request.status === 'accepted' && (
-                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                            <p className="text-sm text-green-800">
-                              <Check className="w-4 h-4 inline mr-1" />
-                              ¡Tu solicitud fue aceptada! Puedes contactar al dueño.
-                            </p>
-                          </div>
+                          <>
+                            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <p className="text-sm text-green-800">
+                                <Check className="w-4 h-4 inline mr-1" />
+                                ¡Tu solicitud fue aceptada! Puedes contactar al dueño.
+                              </p>
+                            </div>
+                            <div className="mt-4">
+                              <Button 
+                                type="button" 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleOpenChat(request)}
+                              >
+                                <MessageCircle className="w-4 h-4 mr-1" />
+                                Contactar
+                              </Button>
+                            </div>
+                          </>
                         )}
 
                         {request.status === 'rejected' && (
@@ -1058,189 +1335,6 @@ const Parejas: React.FC = () => {
           </div>
         )}
 
-        {/* Mis Parejas Tab */}
-        {activeTab === 'mis-parejas' && (
-          <div className="space-y-6">
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Pendientes</p>
-                    <p className="text-2xl font-bold text-yellow-600">{pendingMatches.length}</p>
-                  </div>
-                  <Clock className="h-8 w-8 text-yellow-500" />
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Aceptados</p>
-                    <p className="text-2xl font-bold text-green-600">{acceptedMatches.length}</p>
-                  </div>
-                  <Check className="h-8 w-8 text-green-500" />
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total</p>
-                    <p className="text-2xl font-bold text-purple-600">{myMatches.length}</p>
-                  </div>
-                  <Users className="h-8 w-8 text-purple-500" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Search and Filter */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Filter className="w-5 h-5 mr-2" />
-                Buscar y Filtrar
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="matches-pet-filter">Filtrar por mascota</Label>
-                  <Select value={matchesSearch} onValueChange={setMatchesSearch}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar mascota..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas las mascotas</SelectItem>
-                      {Array.from(new Set([
-                        ...myMatches.map(m => m.pet?.name).filter(Boolean),
-                        ...myMatches.map(m => m.potential_partner?.name).filter(Boolean)
-                      ])).map(petName => (
-                        <SelectItem key={petName} value={petName}>{petName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor="matches-status-filter">Filtrar por estado</Label>
-                  <Select value={matchesFilter} onValueChange={setMatchesFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los estados</SelectItem>
-                      <SelectItem value="pending">Pendientes</SelectItem>
-                      <SelectItem value="accepted">Aceptadas</SelectItem>
-                      <SelectItem value="rejected">Rechazadas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Matches List */}
-          <div className="space-y-4">
-            {myMatches.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No tienes parejas aún</h3>
-                  <p className="text-gray-600">
-                    Ve a Pet Tinder para comenzar a buscar parejas para tus mascotas.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : filteredAndSortedMatches.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron resultados</h3>
-                  <p className="text-gray-600">
-                    No hay parejas que coincidan con los filtros aplicados.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredAndSortedMatches.map((match) => (
-                <Card key={match.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
-                        {match.potential_partner?.image_url ? (
-                          <img
-                            src={match.potential_partner.image_url}
-                            alt={match.potential_partner.name}
-                            className="w-full h-full object-cover rounded-full"
-                          />
-                        ) : (
-                          <PawPrint className="w-8 h-8 text-gray-400" />
-                        )}
-                      </div>
-                      
-                      <div>
-                        <h3 className="font-semibold">{match.potential_partner?.name}</h3>
-                        <p className="text-sm text-gray-600">{match.potential_partner?.breed}</p>
-                        <p className="text-xs text-gray-500">
-                          Dueño: {match.partner_owner?.full_name}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-3">
-                      <Badge className={getStatusColor(match.status)}>
-                        {getStatusLabel(match.status)}
-                      </Badge>
-                      
-                      {match.status === 'pending' && (
-                        <div className="flex space-x-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRejectMatch(match.id)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => handleAcceptMatch(match.id)}
-                            className="bg-green-500 hover:bg-green-600"
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {match.status === 'accepted' && (
-                        <Button 
-                          type="button" 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => handleOpenChat(match)}
-                        >
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Contactar
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              ))
-            )}
-          </div>
-          </div>
-        )}
       </div>
 
       {/* Pet Details Modal */}
@@ -1342,19 +1436,24 @@ const Parejas: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="flex space-x-3 pt-4 border-t">
-                <Button
-                  type="button"
-                  onClick={() => handleLike(selectedPetDetails.id)}
-                  className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
-                >
-                  <Heart className="w-4 h-4 mr-2" />
-                  Solicitar Amor
-                </Button>
+                {!isViewingFromRequest && (
+                  <Button
+                    type="button"
+                    onClick={() => handleLike(selectedPetDetails.id)}
+                    className="flex-1 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
+                  >
+                    <Heart className="w-4 h-4 mr-2" />
+                    Solicitar Amor
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowDetailsModal(false)}
-                  className="flex-1"
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setIsViewingFromRequest(false);
+                  }}
+                  className={isViewingFromRequest ? "flex-1" : "flex-1"}
                 >
                   Cerrar
                 </Button>

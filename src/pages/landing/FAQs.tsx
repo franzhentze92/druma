@@ -50,14 +50,14 @@ export const FAQs: React.FC = () => {
 
   const faqs = [
     {
-      question: '¿Qué es Druma y cómo funciona?',
-      answer: 'Druma es una plataforma integral para el cuidado de mascotas que conecta dueños, veterinarios y proveedores de servicios. Ofrece 6 módulos principales: Ejercicio y Trazabilidad, Nutrición Inteligente, Veterinaria Digital, Adopción Responsable, Marketplace Integral y Recordatorios Inteligentes. Cada módulo incluye dashboards con analytics avanzados y seguimiento completo.',
+      question: '¿Qué es PetHub y cómo funciona?',
+      answer: 'PetHub es una plataforma integral para el cuidado de mascotas que conecta dueños, veterinarios y proveedores de servicios. Ofrece 6 módulos principales: Ejercicio y Trazabilidad, Nutrición Inteligente, Veterinaria Digital, Adopción Responsable, Marketplace Integral y Recordatorios Inteligentes. Cada módulo incluye dashboards con analytics avanzados y seguimiento completo.',
       category: 'General',
       icon: PawPrint
     },
     {
-      question: '¿Es Druma completamente gratuito?',
-      answer: 'Druma ofrece un plan gratuito con funcionalidades básicas de todos los módulos. Los planes premium incluyen analytics avanzados, recordatorios personalizados, soporte prioritario y acceso a más de 1,000 productos en el marketplace. Puedes ver todos nuestros planes en la sección de precios.',
+      question: '¿Es PetHub completamente gratuito?',
+      answer: 'PetHub ofrece un plan gratuito con funcionalidades básicas de todos los módulos. Los planes premium incluyen analytics avanzados, recordatorios personalizados, soporte prioritario y acceso a más de 1,000 productos en el marketplace. Puedes ver todos nuestros planes en la sección de precios.',
       category: 'Cuenta',
       icon: Coins
     },
@@ -69,13 +69,13 @@ export const FAQs: React.FC = () => {
     },
     {
       question: '¿Es seguro compartir información médica de mis mascotas?',
-      answer: 'Absolutamente. Druma utiliza encriptación de nivel bancario, cumple con GDPR y los más altos estándares de seguridad. Tu información y la de tus mascotas están protegidas con autenticación de dos factores. Solo tú y los veterinarios que autorices pueden acceder a los datos médicos.',
+      answer: 'Absolutamente. PetHub utiliza encriptación de nivel bancario, cumple con GDPR y los más altos estándares de seguridad. Tu información y la de tus mascotas están protegidas con autenticación de dos factores. Solo tú y los veterinarios que autorices pueden acceder a los datos médicos.',
       category: 'Seguridad',
       icon: Shield
     },
     {
-      question: '¿Puedo usar Druma desde mi teléfono móvil?',
-      answer: 'Sí, Druma es completamente responsivo y optimizado para dispositivos móviles. Puedes acceder desde cualquier navegador web en tu smartphone o tablet. La interfaz se adapta perfectamente a pantallas pequeñas y todas las funcionalidades están disponibles en móvil.',
+      question: '¿Puedo usar PetHub desde mi teléfono móvil?',
+      answer: 'Sí, PetHub es completamente responsivo y optimizado para dispositivos móviles. Puedes acceder desde cualquier navegador web en tu smartphone o tablet. La interfaz se adapta perfectamente a pantallas pequeñas y todas las funcionalidades están disponibles en móvil.',
       category: 'Técnico',
       icon: Phone
     },
@@ -86,14 +86,14 @@ export const FAQs: React.FC = () => {
       icon: Heart
     },
     {
-      question: '¿Qué tipos de trazabilidad ofrece Druma?',
-      answer: 'Druma ofrece trazabilidad completa en 3 áreas: Física (ejercicio con métricas de calorías quemadas), Nutricional (horarios automáticos y cálculo de nutrientes), y Veterinaria (historial médico completo). Cada área incluye dashboards con analytics, gráficos de tendencias y recordatorios inteligentes.',
+      question: '¿Qué tipos de trazabilidad ofrece PetHub?',
+      answer: 'PetHub ofrece trazabilidad completa en 3 áreas: Física (ejercicio con métricas de calorías quemadas), Nutricional (horarios automáticos y cálculo de nutrientes), y Veterinaria (historial médico completo). Cada área incluye dashboards con analytics, gráficos de tendencias y recordatorios inteligentes.',
       category: 'Funcionalidades',
       icon: BarChart3
     },
     {
       question: '¿Puedo conectar con veterinarios a través de la plataforma?',
-      answer: 'Sí, Druma tiene más de 500 veterinarios verificados en la plataforma. Puedes ver sus perfiles, especialidades, reseñas de otros usuarios, disponibilidad y contactarlos directamente. También puedes compartir el historial médico completo de tus mascotas y programar citas online.',
+      answer: 'Sí, PetHub tiene más de 500 veterinarios verificados en la plataforma. Puedes ver sus perfiles, especialidades, reseñas de otros usuarios, disponibilidad y contactarlos directamente. También puedes compartir el historial médico completo de tus mascotas y programar citas online.',
       category: 'Veterinaria',
       icon: Stethoscope
     },
@@ -111,13 +111,13 @@ export const FAQs: React.FC = () => {
     },
     {
       question: '¿Qué análisis y reportes puedo ver?',
-      answer: 'Druma ofrece dashboards completos con métricas de ejercicio (calorías quemadas, tiempo activo), nutrición (horarios cumplidos, análisis nutricional), salud (historial médico, próximas citas) y gastos (marketplace, veterinaria). Los reportes se pueden exportar y compartir con veterinarios.',
+      answer: 'PetHub ofrece dashboards completos con métricas de ejercicio (calorías quemadas, tiempo activo), nutrición (horarios cumplidos, análisis nutricional), salud (historial médico, próximas citas) y gastos (marketplace, veterinaria). Los reportes se pueden exportar y compartir con veterinarios.',
       category: 'Análisis',
       icon: TrendingUp
     },
     {
       question: '¿Qué hago si encuentro un error o necesito ayuda?',
-      answer: 'Si encuentras algún error o necesitas ayuda, puedes contactarnos a través de la sección "Contacto" en nuestra página web. Ofrecemos soporte por email en soporte@druma.gt, chat en vivo en la plataforma, y teléfono en +502 1234-5678 durante horarios laborales. Tiempo de respuesta promedio: menos de 24 horas.',
+      answer: 'Si encuentras algún error o necesitas ayuda, puedes contactarnos a través de la sección "Contacto" en nuestra página web. Ofrecemos soporte por email en soporte@pethub.gt, chat en vivo en la plataforma, y teléfono en +502 1234-5678 durante horarios laborales. Tiempo de respuesta promedio: menos de 24 horas.',
       category: 'Soporte',
       icon: MessageCircle
     }
@@ -185,7 +185,7 @@ export const FAQs: React.FC = () => {
             </h1>
           </div>
           <p className="text-xl text-purple-100 max-w-3xl mx-auto leading-relaxed">
-            Encuentra respuestas rápidas a las preguntas más comunes sobre Druma. 
+            Encuentra respuestas rápidas a las preguntas más comunes sobre PetHub. 
             Si no encuentras lo que buscas, no dudes en contactarnos.
           </p>
           <div className="flex flex-wrap justify-center gap-4 mt-8">

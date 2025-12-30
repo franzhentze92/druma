@@ -22,7 +22,7 @@ export const Privacy: React.FC = () => {
               Tu <span className="text-yellow-300">Privacidad</span> es Nuestra Prioridad
             </h1>
             <p className="text-xl text-purple-100 max-w-3xl mx-auto leading-relaxed">
-              En Druma, protegemos y respetamos tu información personal. 
+              En PetHub, protegemos y respetamos tu información personal. 
               Conoce cómo recopilamos, usamos y protegemos tus datos.
             </p>
           </div>
@@ -60,12 +60,12 @@ export const Privacy: React.FC = () => {
                   Introducción
                 </h2>
                 <p className="text-lg text-gray-600 leading-relaxed mb-4">
-                  En Druma, valoramos tu confianza y nos comprometemos a proteger tu información personal. 
+                  En PetHub, valoramos tu confianza y nos comprometemos a proteger tu información personal. 
                   Esta Política de Privacidad describe cómo recopilamos, usamos, almacenamos y protegemos 
                   tu información cuando utilizas nuestra plataforma.
                 </p>
                 <p className="text-lg text-gray-600 leading-relaxed">
-                  Al usar Druma, aceptas las prácticas descritas en esta política. 
+                  Al usar PetHub, aceptas las prácticas descritas en esta política. 
                   Si no estás de acuerdo con alguna parte de esta política, por favor no uses nuestros servicios.
                 </p>
               </div>
@@ -223,7 +223,7 @@ export const Privacy: React.FC = () => {
                     puedes contactarnos:
                   </p>
                   <ul className="text-gray-600 space-y-2">
-                    <li><strong>Email:</strong> privacidad@druma.com</li>
+                    <li><strong>Email:</strong> privacidad@pethub.com</li>
                     <li><strong>Dirección:</strong> Zona 10, Guatemala City, Guatemala</li>
                     <li><strong>Teléfono:</strong> +502 1234-5678</li>
                   </ul>

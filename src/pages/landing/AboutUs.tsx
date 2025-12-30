@@ -117,10 +117,10 @@ export const AboutUs: React.FC = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 mb-6">
             <PawPrint className="w-5 h-5 text-white" />
-            <span className="text-white font-medium">Druma</span>
+            <span className="text-white font-medium">PetHub</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-            Sobre <span className="text-yellow-300">Druma</span>
+            Sobre <span className="text-yellow-300">PetHub</span>
           </h1>
           <p className="text-xl text-purple-100 max-w-3xl mx-auto leading-relaxed">
             Nuestra misión es revolucionar el cuidado de mascotas a través de la tecnología 
@@ -215,7 +215,7 @@ export const AboutUs: React.FC = () => {
               Los principios que nos guían
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Los valores fundamentales que guían cada decisión y acción en Druma.
+              Los valores fundamentales que guían cada decisión y acción en PetHub.
             </p>
           </div>
 
@@ -316,7 +316,7 @@ export const AboutUs: React.FC = () => {
                     <h3 className="text-xl font-semibold text-gray-900">Los Inicios (2022)</h3>
                   </div>
                   <p className="text-gray-600 leading-relaxed">
-                    Druma nació de la visión de un grupo de veterinarios y desarrolladores 
+                    PetHub nació de la visión de un grupo de veterinarios y desarrolladores 
                     que identificaron la necesidad de una plataforma integral para el cuidado de mascotas 
                     en Guatemala. Comenzamos como un pequeño proyecto local con grandes sueños.
                   </p>
@@ -390,7 +390,7 @@ export const AboutUs: React.FC = () => {
               Conoce a nuestro equipo
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Las personas apasionadas y expertas que hacen posible Druma día a día.
+              Las personas apasionadas y expertas que hacen posible PetHub día a día.
             </p>
           </div>
 

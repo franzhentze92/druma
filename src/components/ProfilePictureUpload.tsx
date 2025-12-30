@@ -150,7 +150,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
                   {" "}o arrastra y suelta
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  PNG, JPG hasta 5MB
+                  PNG, JPG hasta 50MB
                 </p>
               </div>
             </div>

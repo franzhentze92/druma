@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,9 +7,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, EyeOff, Mail, Lock, PawPrint, ArrowLeft, Home } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 
 export const Login: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +19,74 @@ export const Login: React.FC = () => {
     password: '',
     rememberMe: false
   });
+
+  // Handle email confirmation callback from URL
+  useEffect(() => {
+    const handleEmailConfirmation = async () => {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const type = hashParams.get('type');
+
+      if (type === 'signup' && accessToken && refreshToken) {
+        try {
+          console.log('Login: Handling email confirmation callback...');
+          // Set the session with the tokens from the URL
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          // Clear the URL hash
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
+          toast({
+            title: "¡Email confirmado!",
+            description: "Tu email ha sido confirmado exitosamente. Redirigiendo...",
+          });
+
+          // Wait a moment for the session to be set, then redirect based on role
+          setTimeout(() => {
+            const role = localStorage.getItem('user_role') as 'client' | 'provider' | 'shelter' | null;
+            console.log('Login: Email confirmed, checking role for redirect:', role);
+            
+            if (role) {
+              // Redirect directly to the appropriate dashboard
+              switch (role) {
+                case 'client':
+                  navigate('/marketplace/products');
+                  break;
+                case 'provider':
+                  navigate('/provider');
+                  break;
+                case 'shelter':
+                  navigate('/shelter-dashboard');
+                  break;
+                default:
+                  navigate('/app');
+              }
+            } else {
+              // No role found, go to role selection
+              navigate('/role');
+            }
+          }, 1000);
+        } catch (error: any) {
+          console.error('Error confirming email:', error);
+          toast({
+            title: "Error al confirmar email",
+            description: error.message || "El enlace de confirmación no es válido o ha expirado",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    handleEmailConfirmation();
+  }, [navigate, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -32,16 +101,78 @@ export const Login: React.FC = () => {
     
     try {
       await signIn(formData.email, formData.password);
+      
+      // Check if email is confirmed
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (currentUser && !currentUser.email_confirmed_at) {
+        toast({
+          title: "Email no confirmado",
+          description: "Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.",
+          variant: "destructive",
+        });
+        // Sign out the user since email is not confirmed
+        await supabase.auth.signOut();
+        return;
+      }
+      
+      // Check if user has a role from registration (don't clear it if it exists)
+      let role = localStorage.getItem('user_role') as 'client' | 'provider' | 'shelter' | null;
+      
+      // If no role in localStorage, try to get it from the database
+      if (!role && currentUser) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('user_id', currentUser.id)
+          .single();
+        
+        if (profile?.role) {
+          role = profile.role;
+          localStorage.setItem('user_role', role);
+        }
+      }
+      
+      // Only clear role if user explicitly wants to change it (not on normal login)
+      // For now, we keep the role from registration
+      
       toast({
         title: "¡Bienvenido!",
         description: "Has iniciado sesión exitosamente",
       });
-      navigate('/app');
+      
+      // Redirect based on role
+      if (role) {
+        switch (role) {
+          case 'client':
+            navigate('/marketplace/products');
+            break;
+          case 'provider':
+            navigate('/provider');
+            break;
+          case 'shelter':
+            navigate('/shelter-dashboard');
+            break;
+          default:
+            navigate('/app');
+        }
+      } else {
+        // No role found, go to role selection
+        navigate('/role');
+      }
     } catch (error: any) {
       console.error('Login error:', error);
+      
+      // Check for specific error messages
+      let errorMessage = error.message || "Error al iniciar sesión";
+      
+      if (error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
+        errorMessage = "Por favor confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.";
+      }
+      
       toast({
         title: "Error",
-        description: error.message || "Error al iniciar sesión",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -72,7 +203,7 @@ export const Login: React.FC = () => {
             ¡Bienvenido de vuelta!
           </h1>
           <p className="text-sm md:text-base text-gray-600">
-            Inicia sesión para acceder a tu cuenta de Druma
+            Inicia sesión para acceder a tu cuenta de PetHub
           </p>
         </div>
 
