@@ -19,10 +19,10 @@ import {
   HeartHandshake,
   Utensils,
   Dumbbell,
-  ChevronUp,
   Wrench,
   ShoppingCart,
-  MessageCircle
+  MessageCircle,
+  Scissors
 } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import { useNavigation } from '@/contexts/NavigationContext';
@@ -71,17 +71,19 @@ const Navigation: React.FC = () => {
     { id: 'nutrition', label: 'Nutrición', icon: Utensils, color: 'from-orange-500 to-red-500', path: '/feeding-schedules' },
     { id: 'exercise', label: 'Ejercicio', icon: Activity, color: 'from-green-500 to-blue-500', path: '/trazabilidad' },
     { id: 'veterinary', label: 'Veterinaria', icon: Stethoscope, color: 'from-blue-500 to-purple-500', path: '/veterinaria' },
+    { id: 'recordatorios', label: 'Recordatorios', icon: Bell, color: 'from-purple-500 to-indigo-500', path: '/recordatorios' },
   ];
 
   // Shop sub-options
   const shopOptions = [
     { id: 'products', label: 'Productos', icon: Package, color: 'from-green-500 to-emerald-500', path: '/marketplace/products' },
-    { id: 'services', label: 'Servicios', icon: Wrench, color: 'from-blue-500 to-cyan-500', path: '/marketplace/services' },
+    { id: 'services', label: 'Servicios', icon: Scissors, color: 'from-blue-500 to-cyan-500', path: '/marketplace/services' },
     { id: 'orders', label: 'Mis Órdenes', icon: ShoppingCart, color: 'from-purple-500 to-indigo-500', path: '/client-orders' },
   ];
 
   // Social sub-options
   const socialOptions = [
+    { id: 'adopcion', label: 'Adopción', icon: Heart, color: 'from-green-500 to-emerald-500', path: '/adopcion' },
     { id: 'parejas', label: 'Parejas', icon: HeartHandshake, color: 'from-rose-500 to-pink-500', path: '/parejas' },
     { id: 'mascotas-perdidas', label: 'Mascotas Perdidas', icon: Search, color: 'from-orange-500 to-red-500', path: '/mascotas-perdidas' },
   ];
@@ -91,8 +93,7 @@ const Navigation: React.FC = () => {
     { id: 'dashboard', label: 'Dashboard', icon: Home, color: 'from-blue-500 to-purple-600', path: '/dashboard' },
     { id: 'shop', label: 'Tienda', icon: ShoppingBag, color: 'from-orange-500 to-red-600', expandable: true },
     { id: 'care', label: 'Cuidado', icon: Heart, color: 'from-pink-500 to-purple-600', expandable: true },
-    { id: 'adopcion', label: 'Adopción', icon: Users, color: 'from-green-500 to-emerald-600', path: '/adopcion' },
-    { id: 'social', label: 'Social', icon: MessageCircle, color: 'from-blue-500 to-cyan-600', expandable: true },
+    { id: 'social', label: 'Social', icon: PawPrint, color: 'from-blue-500 to-cyan-600', expandable: true },
     { id: 'profile', label: 'Ajustes', icon: Settings, color: 'from-gray-500 to-slate-600', path: '/ajustes' },
   ];
 
@@ -180,7 +181,10 @@ const Navigation: React.FC = () => {
                 }}
                 className={`
                   w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0
-                  ${(location.pathname === item.path || (item.id === 'shop' && location.pathname.startsWith('/marketplace')) || (item.id === 'dashboard' && location.pathname === '/dashboard'))
+                  ${(location.pathname === item.path || 
+                      (item.id === 'shop' && location.pathname.startsWith('/marketplace')) || 
+                      (item.id === 'dashboard' && location.pathname === '/dashboard') ||
+                      (item.id === 'social' && (location.pathname === '/adopcion' || location.pathname === '/parejas' || location.pathname === '/mascotas-perdidas')))
                     ? `bg-gradient-to-r ${item.color} text-white shadow-lg transform scale-105` 
                     : 'text-gray-500 hover:text-gray-700'
                   }
@@ -189,12 +193,6 @@ const Navigation: React.FC = () => {
               >
                 <item.icon size={18} className="mb-1" />
                 <span className="text-xs font-medium truncate leading-tight">{item.label}</span>
-                {item.expandable && (
-                  <ChevronUp 
-                    size={12} 
-                    className={`transition-transform duration-200 ${expandedButton === item.id ? 'rotate-180' : ''}`} 
-                  />
-                )}
               </button>
               
               {/* Expanded Options */}

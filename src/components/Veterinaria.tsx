@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { 
   Stethoscope,
   Plus,
@@ -340,8 +340,13 @@ const Veterinaria: React.FC = () => {
     }
 
     const totalSessions = filteredSessions.length;
-    const totalCost = filteredSessions.reduce((sum, session) => sum + (session.cost || 0), 0);
-    const averageCost = Math.round(totalCost / totalSessions);
+    // Ensure cost is converted to number and sum correctly
+    const totalCost = filteredSessions.reduce((sum, session) => {
+      const costValue = typeof session.cost === 'string' ? parseFloat(session.cost) : (session.cost || 0);
+      return sum + (isNaN(costValue) ? 0 : costValue);
+    }, 0);
+    // Calculate average (keep full precision, round only for display)
+    const averageCost = totalSessions > 0 ? totalCost / totalSessions : 0;
 
     // Find most common appointment type
     const typeCounts = filteredSessions.reduce((acc, session) => {
@@ -375,29 +380,43 @@ const Veterinaria: React.FC = () => {
   const getChartData = () => {
     const filteredSessions = getFilteredVeterinarySessions();
     
-    // Group sessions by date
+    // Group sessions by date (normalize date to YYYY-MM-DD format for grouping)
     const sessionsByDate = filteredSessions.reduce((acc, session) => {
-      const date = session.date;
-      if (!acc[date]) {
-        acc[date] = {
-          date: new Date(date).toLocaleDateString('es-GT'),
+      // Normalize date to YYYY-MM-DD format for consistent grouping
+      const sessionDate = new Date(session.date);
+      const normalizedDate = sessionDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      if (!acc[normalizedDate]) {
+        acc[normalizedDate] = {
+          date: sessionDate.toLocaleDateString('es-GT'),
           sessions: 0,
-          cost: 0
+          cost: 0,
+          sortDate: normalizedDate // Keep original for sorting
         };
       }
-      acc[date].sessions += 1;
-      acc[date].cost += session.cost || 0;
+      // Ensure sessions is incremented as a number
+      acc[normalizedDate].sessions = (acc[normalizedDate].sessions || 0) + 1;
+      const costValue = typeof session.cost === 'string' ? parseFloat(session.cost) : (session.cost || 0);
+      acc[normalizedDate].cost += isNaN(costValue) ? 0 : costValue;
       return acc;
     }, {} as Record<string, any>);
 
-    // Convert to array and sort by date
+    // Convert to array and sort by date (using sortDate for accurate sorting)
     return Object.values(sessionsByDate).sort((a: any, b: any) => 
-      new Date(a.date.split('/').reverse().join('-')).getTime() - new Date(b.date.split('/').reverse().join('-')).getTime()
+      a.sortDate.localeCompare(b.sortDate)
     );
   };
 
   const veterinaryStats = getVeterinaryStats();
   const chartData = getChartData();
+
+  // Debug: Log chart data to verify sessions are being counted correctly
+  useEffect(() => {
+    if (chartData.length > 0) {
+      console.log('Veterinary Chart Data:', chartData);
+      console.log('Total sessions in chart:', chartData.reduce((sum, item) => sum + (item.sessions || 0), 0));
+    }
+  }, [chartData]);
 
   return (
     <div className="p-6 space-y-6" style={{ paddingBottom: '100px' }}>
@@ -684,7 +703,7 @@ const Veterinaria: React.FC = () => {
                   <CardTitle className="text-sm font-medium text-gray-600">Costo Total</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">Q{veterinaryStats.total_cost}</div>
+                  <div className="text-2xl font-bold text-green-600">Q{Math.round(veterinaryStats.total_cost * 100) / 100}</div>
                   <p className="text-xs text-gray-500">Total gastado</p>
                 </CardContent>
               </Card>
@@ -694,7 +713,7 @@ const Veterinaria: React.FC = () => {
                   <CardTitle className="text-sm font-medium text-gray-600">Costo Promedio</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">Q{veterinaryStats.average_cost}</div>
+                  <div className="text-2xl font-bold text-blue-600">Q{Math.round(veterinaryStats.average_cost * 100) / 100}</div>
                   <p className="text-xs text-gray-500">Por visita</p>
                 </CardContent>
               </Card>
@@ -750,43 +769,54 @@ const Veterinaria: React.FC = () => {
                         textAnchor="end"
                         height={60}
                       />
-                      <YAxis tick={{ fontSize: 12 }} />
+                      <YAxis 
+                        yAxisId="left"
+                        tick={{ fontSize: 12 }}
+                        label={{ value: 'Visitas', angle: -90, position: 'insideLeft' }}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fontSize: 12 }}
+                        label={{ value: 'Costo (Q)', angle: 90, position: 'insideRight' }}
+                      />
                       <Tooltip 
-                        formatter={(value, name) => {
-                          if (name === 'cost') return [`Q${value}`, 'Costo'];
+                        formatter={(value: any, name: string) => {
+                          if (name === 'cost') {
+                            const costValue = typeof value === 'number' ? value : parseFloat(value) || 0;
+                            return [`Q${Math.round(costValue * 100) / 100}`, 'Costo'];
+                          }
                           if (name === 'sessions') return [`${value}`, 'Visitas'];
                           return [value, name];
                         }}
                         labelFormatter={(label) => `Fecha: ${label}`}
                       />
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        iconType="line"
+                      />
                       <Line 
                         type="monotone" 
                         dataKey="sessions" 
-                        stroke="#ef4444" 
+                        yAxisId="left"
+                        stroke="#10b981" 
                         strokeWidth={3}
-                        dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
+                        dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
                         name="Visitas"
+                        legendType="line"
                       />
                       <Line 
                         type="monotone" 
                         dataKey="cost" 
-                        stroke="#10b981" 
+                        yAxisId="right"
+                        stroke="#ef4444" 
                         strokeWidth={3}
-                        dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                        dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
                         name="Costo"
+                        legendType="line"
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
-                <div className="mt-4 flex justify-center gap-6 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span>Visitas</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span>Costo (Q)</span>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -856,17 +886,17 @@ const Veterinaria: React.FC = () => {
                 <div className="space-y-4">
                   {getFilteredVeterinarySessions().map((session) => (
                     <div key={session.id} className="border-l-4 border-red-500 pl-4 py-4 bg-red-50 rounded-r-lg">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Stethoscope className="w-5 h-5 text-red-600" />
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <Stethoscope className="w-5 h-5 text-red-600 flex-shrink-0" />
                             <span className="font-semibold text-gray-800">
                               {appointmentTypes.find(t => t.value === session.appointment_type)?.label || session.appointment_type}
                             </span>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs flex-shrink-0">
                               {session.pet_name}
                             </Badge>
-                            <Badge className="bg-red-100 text-red-800">
+                            <Badge className="bg-red-100 text-red-800 flex-shrink-0">
                               {session.veterinarian_name}
                             </Badge>
                           </div>
@@ -880,7 +910,7 @@ const Veterinaria: React.FC = () => {
                             })}
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button
                             variant="outline"
                             size="sm"

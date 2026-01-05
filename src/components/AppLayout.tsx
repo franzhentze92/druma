@@ -82,6 +82,9 @@ const AppLayout: React.FC = () => {
       if (pathname === '/veterinaria') {
         return <Veterinaria />;
       }
+      if (pathname === '/recordatorios') {
+        return <Recordatorios />;
+      }
       if (pathname === '/meal-journal') {
         return <MealJournal />;
       }

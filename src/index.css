@@ -23,6 +23,15 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(to bottom, #059669, #0d9488);
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer base {

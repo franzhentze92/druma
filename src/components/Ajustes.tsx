@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Dog, Bell, Shield, HelpCircle, LogOut, Edit, Plus, Trash2, Heart, HeartOff, Calendar } from 'lucide-react';
+import { User, Dog, Edit, Plus, Trash2, Heart, HeartOff, Calendar, MapPin, CreditCard } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useUserProfile, usePets } from '@/hooks/useSettings';
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import PageHeader from './PageHeader';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import AddressesAndCardsTab from './AddressesAndCardsTab';
 
 const Ajustes: React.FC = () => {
   const [activeTab, setActiveTab] = useState('perfil');
@@ -29,14 +30,9 @@ const Ajustes: React.FC = () => {
   const tabs = [
     { id: 'perfil', label: 'Mi Perfil', icon: User, color: 'from-blue-500 to-cyan-500' },
     { id: 'perros', label: 'Mis Perros', icon: Dog, color: 'from-green-500 to-emerald-500' },
+    { id: 'direcciones', label: 'Direcciones y Tarjetas', icon: MapPin, color: 'from-orange-500 to-red-500' },
   ];
 
-  const settings = [
-    { icon: Bell, label: 'Notificaciones', description: 'Gestionar alertas y recordatorios' },
-    { icon: Shield, label: 'Privacidad', description: 'Configurar privacidad de datos' },
-    { icon: HelpCircle, label: 'Ayuda', description: 'Centro de ayuda y soporte' },
-    { icon: LogOut, label: 'Cerrar Sesión', description: 'Salir de la aplicación' },
-  ];
 
   const handleEditProfile = () => {
     console.log('Edit profile clicked!')
@@ -182,38 +178,11 @@ const Ajustes: React.FC = () => {
               </>
             )}
           </div>
-
-          {/* Settings */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Configuraciones</h3>
-            <div className="space-y-3">
-              {settings.map((setting, index) => (
-                <button
-                  key={index}
-                  onClick={async () => {
-                    if (setting.label === 'Cerrar Sesión') {
-                      try {
-                        await signOut();
-                        navigate('/login');
-                      } catch (error) {
-                        console.error('Error signing out:', error);
-                      }
-                    }
-                  }}
-                  className="w-full flex items-center space-x-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <setting.icon size={20} className="text-gray-600" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-gray-800">{setting.label}</div>
-                    <div className="text-sm text-gray-500">{setting.description}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
+      )}
+
+      {activeTab === 'direcciones' && (
+        <AddressesAndCardsTab userId={user?.id || ''} />
       )}
 
       {activeTab === 'perros' && (

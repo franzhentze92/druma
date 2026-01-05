@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,7 +37,12 @@ import {
   Info,
   FileText,
   Timer,
-  BookOpen
+  BookOpen,
+  Grid,
+  List,
+  ShoppingCart,
+  Store,
+  ShoppingBag
 } from 'lucide-react';
 import { useProvider, ProviderService, ProviderProduct } from '@/hooks/useProvider';
 import ProviderServiceModal from './ProviderServiceModal';
@@ -79,14 +84,14 @@ const PRODUCT_CATEGORIES = [
   
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(() => {
-    try {
-      return localStorage.getItem('providerDashboardActiveTab') || 'dashboard';
-    } catch {
-      return 'dashboard';
-    }
+    // Check if navigation state has activeTab
+    const state = location.state as { activeTab?: string } | null;
+    return state?.activeTab || 'dashboard';
   });
+  const [activeSubTab, setActiveSubTab] = useState('');
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -120,15 +125,23 @@ const PRODUCT_CATEGORIES = [
     totalProductCategories: 0
   });
 
+  // Always start with dashboard tab when component mounts
+  // (removed localStorage persistence to always show dashboard by default)
+
+  // Check navigation state for activeTab on mount and when location changes
+  useEffect(() => {
+    const state = location.state as { activeTab?: string } | null;
+    if (state?.activeTab) {
+      setActiveTab(state.activeTab);
+      // Clear the state to prevent it from persisting
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
   // Listen for tab change events from SettingsDropdown
   useEffect(() => {
     const handleTabChange = (event: CustomEvent) => {
       setActiveTab(event.detail);
-      try {
-        localStorage.setItem('providerDashboardActiveTab', event.detail);
-      } catch {
-        // ignore storage errors
-      }
     };
 
     window.addEventListener('providerDashboardTabChange', handleTabChange as EventListener);
@@ -724,7 +737,7 @@ const PRODUCT_CATEGORIES = [
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-blue-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 p-3 md:p-6">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
@@ -735,118 +748,110 @@ const PRODUCT_CATEGORIES = [
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-blue-50 p-6">
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    // Set default sub-tab when entering grouped tabs
+    if (value === 'store') {
+      const defaultSubTab = activeSubTab && (activeSubTab === 'services' || activeSubTab === 'products') 
+        ? activeSubTab 
+        : 'services';
+      setActiveSubTab(defaultSubTab);
+      try {
+        localStorage.setItem('providerDashboardActiveSubTab', defaultSubTab);
+      } catch {}
+    } else if (value === 'orders') {
+      const defaultSubTab = activeSubTab && (activeSubTab === 'orders' || activeSubTab === 'appointments' || activeSubTab === 'reviews')
+        ? activeSubTab
+        : 'orders';
+      setActiveSubTab(defaultSubTab);
+      try {
+        localStorage.setItem('providerDashboardActiveSubTab', defaultSubTab);
+      } catch {}
+    } else {
+      setActiveSubTab('');
+      try {
+        localStorage.setItem('providerDashboardActiveSubTab', '');
+      } catch {}
+    }
+    try {
+      localStorage.setItem('providerDashboardActiveTab', value);
+    } catch {
+      // ignore storage errors
+    }
+  };
 
-      
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4">
-            {profile?.profile_picture_url && (
-              <Avatar className="w-16 h-16 border-2 border-emerald-200">
-                <AvatarImage 
-                  src={profile.profile_picture_url} 
-                  alt="Profile picture"
-                  className="object-cover"
-                />
-                <AvatarFallback className="text-lg">
-                  <Building2 className="w-8 h-8" />
-                </AvatarFallback>
-              </Avatar>
-            )}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard del Proveedor</h1>
-              <p className="text-gray-600">
-                {profile ? `Bienvenido, ${profile.business_name}` : 'Configura tu perfil para comenzar'}
-              </p>
+  const handleSubTabChange = (value: string) => {
+    setActiveSubTab(value);
+    try {
+      localStorage.setItem('providerDashboardActiveSubTab', value);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 p-3 md:p-6">
+      {/* Header - Modern Design */}
+      <div className="mb-6 md:mb-8 relative z-10">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-4 md:p-6 text-white shadow-lg relative">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 md:w-6 md:h-6" />
+              </div>
+              <h1 className="text-lg md:text-xl font-bold truncate">Dashboard Proveedor</h1>
+            </div>
+            <div className="flex items-center shrink-0 relative z-50">
+              <SettingsDropdown variant="gradient" />
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <SettingsDropdown variant="default" />
-            
-            <Badge variant="secondary" className="text-sm">
-              <Building2 className="w-4 h-4 mr-2" />
-              Proveedor
-            </Badge>
-            {profile && (
-              <Badge variant={profile.is_verified ? "default" : "outline"} className="text-sm">
-                {profile.is_verified ? "Verificado" : "Pendiente de verificación"}
-              </Badge>
-            )}
-            <Button 
-              onClick={handleLogout} 
-              variant="outline" 
-              className="text-red-600 border-red-300 hover:bg-red-50"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Cerrar Sesión
-            </Button>
+          <div className="pl-0 md:pl-[52px]">
+            <p className="text-sm md:text-base text-emerald-100 truncate">
+              {profile ? profile.business_name : 'Configura tu perfil para comenzar'}
+            </p>
           </div>
         </div>
-
       </div>
 
       {/* Main Content */}
-      <Tabs 
-        value={activeTab} 
-        onValueChange={(value) => {
-          setActiveTab(value);
-          try {
-            localStorage.setItem('providerDashboardActiveTab', value);
-          } catch {
-            // ignore storage errors
-          }
-        }} 
-        className="space-y-6"
-      >
-        <TabsList className="grid w-full grid-cols-7">
-          <TabsTrigger 
-            value="dashboard" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger 
-            value="profile" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Perfil
-          </TabsTrigger>
-          <TabsTrigger 
-            value="services" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Servicios
-          </TabsTrigger>
-          <TabsTrigger
-            value="products"
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Productos
-          </TabsTrigger>
-          <TabsTrigger 
-            value="orders" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Órdenes
-          </TabsTrigger>
-          <TabsTrigger 
-            value="appointments" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Citas
-          </TabsTrigger>
-          <TabsTrigger 
-            value="reviews" 
-            className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
-          >
-            Reseñas
-          </TabsTrigger>
-        </TabsList>
+      <div className="pb-24 md:pb-6">
+        <Tabs 
+          value={activeTab} 
+          onValueChange={handleTabChange} 
+          className="space-y-4 md:space-y-6"
+        >
+          {/* Tabs content without TabsList - we'll use bottom navigation instead on mobile */}
+          <div className="hidden md:block">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger 
+                value="dashboard" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Dashboard
+              </TabsTrigger>
+              <TabsTrigger 
+                value="profile" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Perfil
+              </TabsTrigger>
+              <TabsTrigger 
+                value="store" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Tienda
+              </TabsTrigger>
+              <TabsTrigger 
+                value="orders" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Pedidos
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
         {/* Dashboard Tab */}
-        <TabsContent value="dashboard" className="space-y-6">
+        <TabsContent value="dashboard" className="space-y-4 md:space-y-6">
               {!profile ? (
             <Card>
               <CardContent className="text-center py-8">
@@ -855,7 +860,7 @@ const PRODUCT_CATEGORIES = [
                   <p className="text-gray-500 mb-4">
                     Para comenzar a usar el dashboard, necesitas configurar tu perfil de proveedor.
                   </p>
-                  <Button onClick={() => setActiveTab('profile')}>
+                  <Button onClick={() => handleTabChange('profile')}>
                     Configurar Perfil
                   </Button>
               </CardContent>
@@ -865,7 +870,7 @@ const PRODUCT_CATEGORIES = [
               {/* Key Metrics Cards - Expanded */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="border-l-4 border-l-green-500">
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
@@ -885,7 +890,7 @@ const PRODUCT_CATEGORIES = [
                 </Card>
 
                 <Card className="border-l-4 border-l-blue-500">
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Total Órdenes</p>
@@ -906,7 +911,7 @@ const PRODUCT_CATEGORIES = [
                 </Card>
 
                 <Card className="border-l-4 border-l-emerald-500">
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Productos Vendidos</p>
@@ -925,21 +930,21 @@ const PRODUCT_CATEGORIES = [
                   </CardContent>
                 </Card>
 
-                <Card className="border-l-4 border-l-purple-500">
-                  <CardContent className="p-6">
+                <Card className="border-l-4 border-l-emerald-500">
+                  <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Servicios Reservados</p>
-                        <p className="text-2xl font-bold text-purple-600">{revenueData.totalServicesBooked}</p>
+                        <p className="text-2xl font-bold text-emerald-600">{revenueData.totalServicesBooked}</p>
                       </div>
-                      <div className="p-3 bg-purple-100 rounded-full">
-                        <Calendar className="w-6 h-6 text-purple-600" />
+                      <div className="p-3 bg-emerald-100 rounded-full">
+                        <Calendar className="w-6 h-6 text-emerald-600" />
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       {revenueData.activeServices} activos • {revenueData.upcomingAppointments} próximas
                     </p>
-                    <p className="text-xs text-purple-600 mt-1 font-medium">
+                    <p className="text-xs text-emerald-600 mt-1 font-medium">
                       {revenueData.totalServiceCategories} categorías
                     </p>
                   </CardContent>
@@ -949,7 +954,7 @@ const PRODUCT_CATEGORIES = [
               {/* Secondary Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="border-l-4 border-l-yellow-500">
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Calificación</p>
@@ -1060,12 +1065,12 @@ const PRODUCT_CATEGORIES = [
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                          <h4 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                        <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                          <h4 className="font-semibold text-emerald-800 mb-2 flex items-center gap-2">
                             <Package className="w-4 h-4" />
                             Órdenes
                           </h4>
-                          <div className="space-y-1 text-sm text-purple-700">
+                          <div className="space-y-1 text-sm text-emerald-700">
                             <p>• {revenueData.totalOrders} total</p>
                             <p>• {revenueData.completedOrders} completadas</p>
                             <p>• {revenueData.pendingOrders} pendientes</p>
@@ -1282,17 +1287,17 @@ const PRODUCT_CATEGORIES = [
                       </p>
                     </div>
 
-                    <div className="bg-purple-50 p-4 rounded-lg">
+                    <div className="bg-emerald-50 p-4 rounded-lg">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-purple-600">Total Órdenes</p>
-                          <p className="text-2xl font-bold text-purple-700">{revenueData.totalOrders}</p>
+                          <p className="text-sm font-medium text-emerald-600">Total Órdenes</p>
+                          <p className="text-2xl font-bold text-emerald-700">{revenueData.totalOrders}</p>
                         </div>
-                        <div className="p-2 bg-purple-100 rounded-full">
-                          <Package className="w-5 h-5 text-purple-600" />
+                        <div className="p-2 bg-emerald-100 rounded-full">
+                          <Package className="w-5 h-5 text-emerald-600" />
                         </div>
                       </div>
-                      <p className="text-xs text-purple-600 mt-1">
+                      <p className="text-xs text-emerald-600 mt-1">
                         {revenueData.pendingOrders} pendientes
                       </p>
                     </div>
@@ -1370,17 +1375,17 @@ const PRODUCT_CATEGORIES = [
                     </div>
 
                     {/* Service Utilization */}
-                    <div className="bg-purple-50 p-4 rounded-lg">
+                    <div className="bg-emerald-50 p-4 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-purple-800">Utilización de Servicios</h4>
-                        <Package className="w-5 h-5 text-purple-600" />
+                        <h4 className="font-semibold text-emerald-800">Utilización de Servicios</h4>
+                        <Package className="w-5 h-5 text-emerald-600" />
                       </div>
-                      <p className="text-2xl font-bold text-purple-700">
+                      <p className="text-2xl font-bold text-emerald-700">
                         {services.length > 0 ? 
                           ((services.filter(s => s.is_active).length / services.length) * 100).toFixed(0) 
                           : 0}%
                       </p>
-                      <p className="text-xs text-purple-600 mt-1">
+                      <p className="text-xs text-emerald-600 mt-1">
                         Servicios activos vs total
                       </p>
                     </div>
@@ -1773,8 +1778,26 @@ const PRODUCT_CATEGORIES = [
           </Card>
         </TabsContent>
 
-        {/* Services Tab */}
-        <TabsContent value="services" className="space-y-6">
+        {/* Store Tab (Tienda) - Groups Services and Products */}
+        <TabsContent value="store" className="space-y-4 md:space-y-6">
+          <Tabs value={activeSubTab || 'services'} onValueChange={handleSubTabChange} className="space-y-4 md:space-y-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger 
+                value="services" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Servicios
+              </TabsTrigger>
+              <TabsTrigger 
+                value="products" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Productos
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Services Sub-Tab */}
+            <TabsContent value="services" className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1932,10 +1955,10 @@ const PRODUCT_CATEGORIES = [
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+            </TabsContent>
 
-        {/* Products Tab */}
-        <TabsContent value="products" className="space-y-6">
+            {/* Products Sub-Tab */}
+            <TabsContent value="products" className="space-y-6">
           
           <Card>
             <CardHeader>
@@ -2144,15 +2167,41 @@ const PRODUCT_CATEGORIES = [
               )}
             </CardContent>
           </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
-        {/* Orders Tab */}
-        <TabsContent value="orders" className="space-y-6">
-          <ProviderOrders />
-        </TabsContent>
+        {/* Orders Tab (Pedidos) - Groups Orders, Appointments and Reviews */}
+        <TabsContent value="orders" className="space-y-4 md:space-y-6">
+          <Tabs value={activeSubTab || 'orders'} onValueChange={handleSubTabChange} className="space-y-4 md:space-y-6">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger 
+                value="orders" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Órdenes
+              </TabsTrigger>
+              <TabsTrigger 
+                value="appointments" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Citas
+              </TabsTrigger>
+              <TabsTrigger 
+                value="reviews" 
+                className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700"
+              >
+                Reseñas
+              </TabsTrigger>
+            </TabsList>
 
-        {/* Appointments Tab */}
-        <TabsContent value="appointments" className="space-y-6">
+            {/* Orders Sub-Tab */}
+            <TabsContent value="orders" className="space-y-6">
+              <ProviderOrders />
+            </TabsContent>
+
+            {/* Appointments Sub-Tab */}
+            <TabsContent value="appointments" className="space-y-6">
           <Card className="border-0 shadow-lg">
             <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100/50">
               <CardTitle className="flex items-center gap-3 text-xl">
@@ -2263,8 +2312,8 @@ const PRODUCT_CATEGORIES = [
                                       </div>
                                       <div className="space-y-2.5">
                                         {appointment.provider_services?.service_category && (
-                                          <div className="flex items-center gap-2 text-sm text-gray-700 bg-purple-50 rounded-lg px-3 py-2 border border-purple-100">
-                                            <Tag className="w-4 h-4 text-purple-600 shrink-0" />
+                                          <div className="flex items-center gap-2 text-sm text-gray-700 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-100">
+                                            <Tag className="w-4 h-4 text-emerald-600 shrink-0" />
                                             <span className="font-medium capitalize">{appointment.provider_services.service_category}</span>
                                           </div>
                                         )}
@@ -2401,13 +2450,16 @@ const PRODUCT_CATEGORIES = [
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+            </TabsContent>
 
-        {/* Reviews Tab */}
-        <TabsContent value="reviews" className="space-y-6">
-          <ProviderReviews />
+            {/* Reviews Sub-Tab */}
+            <TabsContent value="reviews" className="space-y-6">
+              <ProviderReviews />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* Service Modal */}
       <ProviderServiceModal
@@ -2457,10 +2509,74 @@ const PRODUCT_CATEGORIES = [
         product={editingProduct}
         isEditing={!!editingProduct}
       />
-      
 
-      
+      {/* Bottom Navigation Menu - Mobile Only */}
+      <div 
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-2xl md:hidden"
+        style={{ height: '80px', boxSizing: 'border-box' }}
+      >
+        <div className="flex justify-around items-center h-full py-2 px-1 overflow-x-auto">
+          {/* Dashboard */}
+          <button
+            onClick={() => handleTabChange('dashboard')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'dashboard'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <Grid size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Dashboard</span>
+          </button>
 
+          {/* Perfil */}
+          <button
+            onClick={() => handleTabChange('profile')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'profile'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <User size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Perfil</span>
+          </button>
+
+          {/* Tienda */}
+          <button
+            onClick={() => handleTabChange('store')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'store'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <Store size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Tienda</span>
+          </button>
+
+          {/* Pedidos */}
+          <button
+            onClick={() => handleTabChange('orders')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'orders'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <ShoppingBag size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Pedidos</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

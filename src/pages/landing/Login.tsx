@@ -14,6 +14,7 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -99,6 +100,14 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Prevent double submission
+    if (isSubmitting) {
+      console.log('Login: Already submitting, ignoring duplicate submit');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
     try {
       await signIn(formData.email, formData.password);
       
@@ -175,6 +184,8 @@ export const Login: React.FC = () => {
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -291,9 +302,10 @@ export const Login: React.FC = () => {
             {/* Login Button */}
             <Button
               type="submit"
-              className="w-full h-12 md:h-14 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm md:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+              disabled={isSubmitting}
+              className="w-full h-12 md:h-14 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm md:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Iniciar Sesión
+              {isSubmitting ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
           </form>
 

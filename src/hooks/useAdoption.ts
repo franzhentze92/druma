@@ -84,22 +84,132 @@ export const useUpdateShelter = () => {
 }
 
 // Adoption pets (with shelters join)
-export const useAdoptionPets = (filters?: { species?: string; size?: string }) => {
+export interface AdoptionFilters {
+  species?: string
+  size?: string
+  age?: string
+  breed?: string
+  gender?: string
+  sex?: string
+  color?: string
+  house_trained?: string | boolean
+  spayed_neutered?: string | boolean
+  special_needs?: string | boolean
+  adoption_fee_max?: string
+  location?: string
+  shelter?: string
+  energy_level?: string
+}
+
+export const useAdoptionPets = (filters?: AdoptionFilters) => {
   return useQuery({
     queryKey: ['adoption_pets', filters],
     queryFn: async () => {
       let query = supabase
         .from('adoption_pets')
-        .select('*, shelters(name)')
+        .select('*, shelters(name, location, phone, description)')
         .eq('status', 'available')
         .order('created_at', { ascending: false })
 
-      if (filters?.species) query = query.eq('species', filters.species)
-      if (filters?.size) query = query.eq('size', filters.size)
+      if (filters?.species) {
+        // Handle both Spanish and English species values
+        const speciesMap: Record<string, string> = {
+          'perro': 'Dog',
+          'gato': 'Cat',
+          'conejo': 'Rabbit',
+          'ave': 'Bird',
+          'otro': 'Other'
+        }
+        const speciesValue = speciesMap[filters.species.toLowerCase()] || filters.species
+        query = query.eq('species', speciesValue)
+      }
+      
+      if (filters?.size) {
+        // Handle both Spanish and English size values
+        const sizeMap: Record<string, string> = {
+          'pequeño': 'Small',
+          'mediano': 'Medium',
+          'grande': 'Large'
+        }
+        const sizeValue = sizeMap[filters.size.toLowerCase()] || filters.size
+        query = query.eq('size', sizeValue)
+      }
+      
+      if (filters?.age) {
+        // Age filtering based on ranges
+        const ageValue = filters.age
+        if (ageValue === 'cachorro') {
+          query = query.lte('age', 1)
+        } else if (ageValue === 'joven') {
+          query = query.gte('age', 1).lte('age', 3)
+        } else if (ageValue === 'adulto') {
+          query = query.gte('age', 3).lte('age', 7)
+        } else if (ageValue === 'senior') {
+          query = query.gte('age', 7)
+        }
+      }
+      
+      if (filters?.breed) {
+        query = query.ilike('breed', `%${filters.breed}%`)
+      }
+      
+      if (filters?.gender || filters?.sex) {
+        const genderValue = filters.gender || filters.sex
+        const sexMap: Record<string, string> = {
+          'macho': 'M',
+          'hembra': 'F',
+          'male': 'M',
+          'female': 'F'
+        }
+        const sexValue = sexMap[genderValue?.toLowerCase() || ''] || genderValue
+        if (sexValue) query = query.eq('sex', sexValue)
+      }
+      
+      if (filters?.color) {
+        query = query.ilike('color', `%${filters.color}%`)
+      }
+      
+      if (filters?.house_trained !== undefined && filters?.house_trained !== '') {
+        const value = filters.house_trained === 'true' || filters.house_trained === true
+        query = query.eq('house_trained', value)
+      }
+      
+      if (filters?.spayed_neutered !== undefined && filters?.spayed_neutered !== '') {
+        const value = filters.spayed_neutered === 'true' || filters.spayed_neutered === true
+        query = query.eq('spayed_neutered', value)
+      }
+      
+      if (filters?.special_needs !== undefined && filters?.special_needs !== '') {
+        const value = filters.special_needs === 'true' || filters.special_needs === true
+        query = query.eq('special_needs', value)
+      }
+      
+      if (filters?.location) {
+        query = query.ilike('location', `%${filters.location}%`)
+      }
+      
+      if (filters?.energy_level) {
+        query = query.eq('energy_level', filters.energy_level)
+      }
 
       const { data, error } = await query
       if (error) throw error
-      return data as Array<AdoptionPet & { shelters: { name: string } | null }>
+      
+      let filteredData = data as Array<AdoptionPet & { shelters: { name: string; location?: string; phone?: string; description?: string } | null }>
+      
+      // Filter adoption_fee client-side since it's stored as string
+      if (filters?.adoption_fee_max) {
+        const maxFee = parseFloat(filters.adoption_fee_max)
+        if (!isNaN(maxFee)) {
+          filteredData = filteredData.filter(pet => {
+            if (!pet.adoption_fee) return true // Include pets with no fee
+            const fee = parseFloat(pet.adoption_fee)
+            return !isNaN(fee) && fee <= maxFee
+          })
+        }
+      }
+      
+      return filteredData
     },
   })
 }
@@ -199,6 +309,20 @@ export const useApplyToPet = () => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (payload: AdoptionApplicationInsert) => {
+      // Check if application already exists
+      const { data: existingApp, error: checkError } = await supabase
+        .from('adoption_applications')
+        .select('id')
+        .eq('pet_id', payload.pet_id)
+        .eq('applicant_id', payload.applicant_id)
+        .maybeSingle()
+      
+      if (checkError && checkError.code !== 'PGRST116') throw checkError
+      
+      if (existingApp) {
+        throw new Error('Ya has enviado una solicitud de adopción para esta mascota')
+      }
+      
       const { data, error } = await supabase
         .from('adoption_applications')
         .insert(payload)
@@ -207,7 +331,31 @@ export const useApplyToPet = () => {
       if (error) throw error
       return data
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my_applications'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my_applications'] })
+      queryClient.invalidateQueries({ queryKey: ['has_applied_to_pet'] })
+    },
+  })
+}
+
+// Check if user has already applied to a pet
+export const useHasAppliedToPet = (petId?: string, userId?: string) => {
+  return useQuery({
+    queryKey: ['has_applied_to_pet', petId, userId],
+    queryFn: async () => {
+      if (!petId || !userId) return false
+      
+      const { data, error } = await supabase
+        .from('adoption_applications')
+        .select('id')
+        .eq('pet_id', petId)
+        .eq('applicant_id', userId)
+        .maybeSingle()
+      
+      if (error && error.code !== 'PGRST116') throw error
+      return !!data
+    },
+    enabled: !!petId && !!userId,
   })
 }
 

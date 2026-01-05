@@ -471,7 +471,7 @@ const SocialHub: React.FC = () => {
           <div className="flex items-start space-x-4">
             <div className="text-2xl">🌟</div>
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">¡Únete a la comunidad Druma!</h3>
+              <h3 className="font-semibold text-gray-900 mb-2">¡Únete a la comunidad PetHub!</h3>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• Conecta con otros dueños de mascotas en tu área</li>
                 <li>• Organiza citas de juego para tu mascota</li>

@@ -651,9 +651,9 @@ const FeedingScheduleManager: React.FC = () => {
               schedules.map((schedule) => (
                 <Card key={schedule.id} className="hover:shadow-md transition-shadow">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {schedule.is_active ? (
                             <Play className="w-5 h-5 text-green-600" />
                           ) : (
@@ -661,11 +661,11 @@ const FeedingScheduleManager: React.FC = () => {
                           )}
                           <CardTitle className="text-lg">{schedule.schedule_name}</CardTitle>
                         </div>
-                        <Badge variant={schedule.is_active ? "default" : "secondary"}>
+                        <Badge variant={schedule.is_active ? "default" : "secondary"} className="flex-shrink-0">
                           {schedule.is_active ? "Activo" : "Pausado"}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"

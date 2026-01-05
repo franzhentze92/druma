@@ -14,13 +14,73 @@ interface SettingsDropdownProps {
 const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ className = "", variant = 'gradient' }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRoleSubmenu, setShowRoleSubmenu] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownMenuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
   const submenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { signOut, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const userRole = localStorage.getItem('user_role');
+
+  // Calculate dropdown position to prevent overflow
+  useEffect(() => {
+    if (showDropdown && dropdownRef.current && dropdownMenuRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const menuWidth = 224; // w-56 = 14rem = 224px
+      const viewportWidth = window.innerWidth;
+      const spaceOnRight = viewportWidth - rect.right;
+      const spaceOnLeft = rect.left;
+      
+      let style: React.CSSProperties = {};
+      
+      // If there's not enough space on the right, align to left
+      if (spaceOnRight < menuWidth && spaceOnLeft >= menuWidth) {
+        style.right = 'auto';
+        style.left = '0';
+      } else {
+        style.right = '0';
+        style.left = 'auto';
+      }
+      
+      // Ensure dropdown doesn't go off screen
+      if (rect.left + menuWidth > viewportWidth) {
+        style.right = '0';
+        style.left = 'auto';
+        style.maxWidth = `${Math.max(spaceOnRight, 200)}px`;
+      }
+      
+      setDropdownStyle(style);
+    }
+  }, [showDropdown]);
+
+  // Calculate submenu position to prevent overflow
+  useEffect(() => {
+    if (showRoleSubmenu && dropdownMenuRef.current && submenuRef.current) {
+      const menuRect = dropdownMenuRef.current.getBoundingClientRect();
+      const submenuWidth = 224; // w-56 = 14rem = 224px
+      const viewportWidth = window.innerWidth;
+      const spaceOnLeft = menuRect.left;
+      
+      let style: React.CSSProperties = {};
+      
+      // If there's not enough space on the left, show submenu on the right
+      if (spaceOnLeft < submenuWidth) {
+        style.right = 'auto';
+        style.left = 'calc(100% + 0.25rem)';
+      } else {
+        style.right = 'calc(100% + 0.25rem)';
+        style.left = 'auto';
+      }
+      
+      // Ensure submenu doesn't go off screen
+      style.maxWidth = `${Math.min(submenuWidth, viewportWidth - 16)}px`;
+      
+      setSubmenuStyle(style);
+    }
+  }, [showRoleSubmenu]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -157,38 +217,20 @@ const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ className = "", var
         navigate('/ajustes');
         break;
       case 'provider':
-        // Store the active tab in localStorage for ProviderDashboard to pick up
-        try {
-          localStorage.setItem('providerDashboardActiveTab', 'profile');
-        } catch {
-          // ignore storage errors
-        }
-        // Navigate to provider dashboard (only if not already there)
-        if (location.pathname !== '/provider') {
-          navigate('/provider');
-        } else {
-          // If already on provider dashboard, dispatch event to change tab
+        // Navigate to provider dashboard with profile tab using state
+        navigate('/provider', { state: { activeTab: 'profile' } });
+        // Also dispatch event as fallback
+        setTimeout(() => {
           window.dispatchEvent(new CustomEvent('providerDashboardTabChange', { detail: 'profile' }));
-          // Also reload as fallback
-          setTimeout(() => window.location.reload(), 100);
-        }
+        }, 100);
         break;
       case 'shelter':
-        // Store the active tab in localStorage for ShelterDashboard to pick up
-        try {
-          localStorage.setItem('shelterDashboardActiveTab', 'profile');
-        } catch {
-          // ignore storage errors
-        }
-        // Navigate to shelter dashboard (only if not already there)
-        if (location.pathname !== '/shelter-dashboard') {
-          navigate('/shelter-dashboard');
-        } else {
-          // If already on shelter dashboard, dispatch event to change tab
+        // Navigate to shelter dashboard with profile tab using state
+        navigate('/shelter-dashboard', { state: { activeTab: 'profile' } });
+        // Also dispatch event as fallback
+        setTimeout(() => {
           window.dispatchEvent(new CustomEvent('shelterDashboardTabChange', { detail: 'profile' }));
-          // Also reload as fallback
-          setTimeout(() => window.location.reload(), 100);
-        }
+        }, 100);
         break;
       default:
         navigate('/ajustes');
@@ -233,7 +275,11 @@ const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ className = "", var
       
       {/* Settings Dropdown */}
       {showDropdown && (
-        <div className="absolute right-0 top-12 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+        <div 
+          ref={dropdownMenuRef}
+          className="absolute top-12 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-[100]"
+          style={dropdownStyle}
+        >
           <div className="py-2">
             {menuItems.map((item, index) => {
               const handleMouseEnterSubmenu = () => {
@@ -286,7 +332,9 @@ const SettingsDropdown: React.FC<SettingsDropdownProps> = ({ className = "", var
                   {/* Role Submenu */}
                   {item.hasSubmenu && showRoleSubmenu && (
                     <div 
-                      className="absolute right-full top-0 mr-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-[60]"
+                      ref={submenuRef}
+                      className="absolute top-0 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-[110]"
+                      style={submenuStyle}
                       onMouseEnter={handleMouseEnterSubmenu}
                       onMouseLeave={handleMouseLeaveSubmenu}
                     >

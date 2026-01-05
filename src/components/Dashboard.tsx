@@ -137,25 +137,25 @@ const Dashboard: React.FC = () => {
       // Load exercise sessions stats
       const { data: exerciseData } = await supabase
         .from('exercise_sessions')
-        .select('duration_minutes, calories_burned')
+        .select('duration_minutes, calories_burned, date, pet_id')
         .eq('owner_id', user?.id);
 
       // Load veterinary visits count
       const { data: vetData } = await supabase
         .from('veterinary_sessions')
-        .select('id')
+        .select('id, date, pet_id')
         .eq('owner_id', user?.id);
 
       // Load feeding schedules count
       const { data: feedingData } = await supabase
         .from('pet_feeding_schedules')
-        .select('id, is_active')
+        .select('id, is_active, pet_id')
         .eq('owner_id', user?.id);
 
       // Load orders count and total spent
       const { data: ordersData } = await supabase
         .from('orders')
-        .select('id, total_amount')
+        .select('id, total_amount, created_at')
         .eq('client_id', user?.id);
 
       // Load breeding matches count
@@ -234,37 +234,95 @@ const Dashboard: React.FC = () => {
 
       const totalCaloriesBurned = exerciseSessions.reduce((sum, session) => sum + (session.calories_burned || 0), 0);
 
-      // Generate chart data for the last 7 days
+      // Generate chart data for the last 7 days from real data
       const last7Days = Array.from({ length: 7 }, (_, i) => {
         const date = subDays(new Date(), 6 - i);
+        const dateStr = format(date, 'yyyy-MM-dd');
+        
+        // Count exercise sessions for this date
+        const dayExerciseSessions = exerciseSessions.filter(session => {
+          if (!session.date) return false;
+          const sessionDate = format(parseISO(session.date), 'yyyy-MM-dd');
+          return sessionDate === dateStr;
+        });
+        const dayExerciseCount = dayExerciseSessions.length;
+        const dayCalories = dayExerciseSessions.reduce((sum, s) => sum + (s.calories_burned || 0), 0);
+        
+        // Count veterinary visits for this date
+        const dayVetVisits = veterinaryVisits.filter(visit => {
+          if (!visit.date) return false;
+          const visitDate = format(parseISO(visit.date), 'yyyy-MM-dd');
+          return visitDate === dateStr;
+        }).length;
+        
+        // Count feeding schedules active on this date (simplified - count active schedules)
+        const dayFeeding = feedingSchedules.filter(s => s.is_active).length;
+        
         return {
           date: format(date, 'MMM dd'),
-          exercise: Math.floor(Math.random() * 5) + 1, // Mock data for now
-          calories: Math.floor(Math.random() * 300) + 100,
-          vetVisits: Math.floor(Math.random() * 2),
-          feeding: Math.floor(Math.random() * 3) + 1
+          exercise: dayExerciseCount,
+          calories: dayCalories,
+          vetVisits: dayVetVisits,
+          feeding: dayFeeding
         };
       });
 
-      // Generate monthly data for the last 6 months
+      // Generate monthly data for the last 6 months from real data
       const last6Months = Array.from({ length: 6 }, (_, i) => {
         const date = subDays(new Date(), (5 - i) * 30);
+        const monthStart = startOfDay(new Date(date.getFullYear(), date.getMonth(), 1));
+        const monthEnd = endOfDay(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+        
+        // Count exercise sessions in this month
+        const monthExercise = exerciseSessions.filter(session => {
+          if (!session.date) return false;
+          const sessionDate = parseISO(session.date);
+          return sessionDate >= monthStart && sessionDate <= monthEnd;
+        }).length;
+        
+        // Count veterinary visits in this month
+        const monthVetVisits = veterinaryVisits.filter(visit => {
+          if (!visit.date) return false;
+          const visitDate = parseISO(visit.date);
+          return visitDate >= monthStart && visitDate <= monthEnd;
+        }).length;
+        
+        // Count orders in this month
+        const monthOrders = orders.filter(order => {
+          if (!order.created_at) return false;
+          const orderDate = parseISO(order.created_at);
+          return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+        const monthSpent = monthOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+        
         return {
           month: format(date, 'MMM'),
-          exercise: Math.floor(Math.random() * 20) + 10,
-          vetVisits: Math.floor(Math.random() * 5) + 1,
-          orders: Math.floor(Math.random() * 8) + 2,
-          spent: Math.floor(Math.random() * 500) + 100
+          exercise: monthExercise,
+          vetVisits: monthVetVisits,
+          orders: monthOrders.length,
+          spent: monthSpent
         };
       });
 
-      // Generate pet activity data
-      const petActivity = petsData?.map(pet => ({
-        name: pet.name,
-        exercise: Math.floor(Math.random() * 10) + 1,
-        vetVisits: Math.floor(Math.random() * 3) + 1,
-        feeding: Math.floor(Math.random() * 5) + 2
-      })) || [];
+      // Generate pet activity data from real data
+      const petActivity = petsData?.map(pet => {
+        // Count exercise sessions for this pet
+        const petExerciseSessions = exerciseSessions.filter(session => session.pet_id === pet.id);
+        const petExerciseCount = petExerciseSessions.length;
+        
+        // Count veterinary visits for this pet
+        const petVetVisits = veterinaryVisits.filter(visit => visit.pet_id === pet.id).length;
+        
+        // Count feeding schedules for this pet
+        const petFeedingSchedules = feedingSchedules.filter(schedule => schedule.pet_id === pet.id).length;
+        
+        return {
+          name: pet.name,
+          exercise: petExerciseCount,
+          vetVisits: petVetVisits,
+          feeding: petFeedingSchedules
+        };
+      }) || [];
 
       const totalSpent = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
 
@@ -275,11 +333,15 @@ const Dashboard: React.FC = () => {
         totalFeedingSchedules: feedingSchedules.length,
         avgExerciseMinutes,
         totalCaloriesBurned,
-        upcomingAppointments: 0, // TODO: Calculate from appointment dates
+        upcomingAppointments: appointments.filter(apt => {
+          if (!apt.appointment_date) return false;
+          const aptDate = parseISO(apt.appointment_date);
+          return aptDate >= startOfDay(new Date());
+        }).length,
         activeFeedingSchedules: feedingSchedules.filter(schedule => schedule.is_active).length,
         totalOrders: orders.length,
         totalSpent: totalSpent,
-        totalReminders: Math.floor(Math.random() * 8) + 3, // Mock data
+        totalReminders: 0, // TODO: Load from reminders table when available
         activeBreedingMatches: breedingMatches.length,
         totalAdoptionRequests: adoptionRequests.length
       });
@@ -506,7 +568,7 @@ const Dashboard: React.FC = () => {
                 <span className="text-xs">+15%</span>
               </div>
             </div>
-            <div className="text-xl md:text-2xl font-bold">${stats.totalSpent}</div>
+            <div className="text-xl md:text-2xl font-bold">Q{stats.totalSpent.toFixed(2)}</div>
             <div className="text-xs md:text-sm opacity-90">Total Gastado</div>
             <div className="text-xs opacity-75 mt-1">{stats.totalOrders} órdenes completadas</div>
           </CardContent>
@@ -613,49 +675,39 @@ const Dashboard: React.FC = () => {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8">
               {/* Calendar View */}
-              <div className="lg:col-span-8">
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
+              <div className="lg:col-span-8 w-full overflow-hidden">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 md:p-6 lg:p-8 w-full overflow-x-auto">
                   <CalendarComponent
                     mode="single"
                     selected={selectedDate}
                     onSelect={setSelectedDate}
-                    locale={es}
-                    className="rounded-lg w-full"
-                    style={{ fontSize: '1rem' }}
-                    classNames={{
-                      months: "flex flex-col space-y-3 w-full",
-                      month: "space-y-3 w-full",
-                      caption: "flex justify-center pt-1 relative items-center mb-4",
-                      caption_label: "text-2xl font-bold text-gray-800",
-                      nav: "space-x-2 flex items-center",
-                      nav_button: "h-9 w-9 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm border border-gray-200",
-                      table: "w-full border-collapse space-y-1",
-                      head_row: "flex mb-2",
-                      head_cell: "text-gray-600 rounded-md w-16 font-bold text-base uppercase tracking-wide",
-                      row: "flex w-full mt-1",
-                      cell: "h-12 w-16 text-center p-0 relative flex items-center justify-center",
-                      day: "h-12 w-16 rounded-lg font-semibold hover:bg-emerald-50 transition-all duration-200 text-base",
-                      day_selected: "bg-gradient-to-br from-emerald-500 to-teal-500 text-white font-bold shadow-lg hover:from-emerald-600 hover:to-teal-600 scale-105 ring-2 ring-emerald-200",
-                      day_today: "bg-emerald-100 text-emerald-700 font-bold border-2 border-emerald-400",
-                      day_outside: "text-gray-400 opacity-50",
-                    }}
+                    className="rounded-md border w-full min-w-[280px]"
                     modifiers={{
                       hasAppointments: appointments.map(apt => 
                         startOfDay(parseISO(apt.appointment_date))
                       )
                     }}
                     modifiersClassNames={{
-                      hasAppointments: "bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-800 font-semibold border border-blue-200 hover:from-blue-200 hover:to-indigo-200"
+                      hasAppointments: "bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-800 font-semibold border border-purple-200"
                     }}
                   />
+                  {selectedDate && (
+                    <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+                      <p className="text-sm font-medium text-purple-900">
+                        {appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length} 
+                        {' '}cita{appointments.filter(apt => isSameDay(parseISO(apt.appointment_date), selectedDate)).length !== 1 ? 's' : ''} 
+                        {' '}el {format(selectedDate, "d 'de' MMMM", { locale: es })}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               
               {/* Appointments List for Selected Date */}
-              <div className="lg:col-span-4">
-                <div className="sticky top-6">
+              <div className="lg:col-span-4 w-full">
+                <div className="sticky top-6 w-full">
                   <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 border border-gray-200">
                     <h3 className="font-bold text-lg text-gray-800 capitalize">
                       {selectedDate ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: es }) : 'Selecciona una fecha'}
@@ -683,9 +735,9 @@ const Dashboard: React.FC = () => {
                           >
                             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                             <div className="relative">
-                              <div className="flex items-start justify-between gap-3 mb-3">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                  <div className="flex flex-wrap items-center gap-2 mb-3">
                                     <h4 className="font-bold text-gray-900 text-base truncate">
                                       {appointment.provider_services?.service_name || 'Servicio'}
                                     </h4>
@@ -905,17 +957,17 @@ const Dashboard: React.FC = () => {
                   className={`bg-gradient-to-r ${section.color} rounded-xl p-3 md:p-4 text-white cursor-pointer hover:scale-105 transition-transform`}
                   onClick={() => section.path ? navigate(section.path) : navigate(`/client-dashboard?section=${section.id}`)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 md:space-x-3">
-                      <div className="w-8 h-8 md:w-10 md:h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex items-center space-x-2 md:space-x-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 md:w-10 md:h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                         <IconComponent className="w-4 h-4 md:w-5 md:h-5" />
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-sm md:text-base">{section.title}</h3>
-                        <p className="text-xs md:text-sm opacity-90">{section.description}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-sm md:text-base truncate">{section.title}</h3>
+                        <p className="text-xs md:text-sm opacity-90 line-clamp-1">{section.description}</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right flex-shrink-0">
                       <div className="text-xs md:text-sm opacity-90">{section.stats}</div>
                       <div className="text-xs opacity-75">{section.action}</div>
                     </div>

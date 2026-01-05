@@ -11,7 +11,8 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
-import { CreditCard, Package, MapPin, Phone, Mail, CheckCircle, Loader2, Heart, Divide } from 'lucide-react';
+import { CreditCard, Package, MapPin, Phone, Mail, CheckCircle, Loader2, Heart, Divide, Star } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface CheckoutProps {
   isOpen: boolean;
@@ -34,6 +35,13 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
   const [selectedPets, setSelectedPets] = useState<{ [itemId: string]: string[] }>({});
   // For food products, store whether to divide price
   const [dividePriceForFood, setDividePriceForFood] = useState<{ [itemId: string]: boolean }>({});
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [cards, setCards] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [useSavedAddress, setUseSavedAddress] = useState(false);
+  const [useSavedCard, setUseSavedCard] = useState(false);
   const [formData, setFormData] = useState({
     fullName: user?.email?.split('@')[0] || '',
     phone: '',
@@ -43,47 +51,126 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
     paymentMethod: 'card'
   });
 
-  // Fetch user's pets
+  // Fetch user's pets, addresses, and cards
   useEffect(() => {
-    const fetchPets = async () => {
+    const fetchData = async () => {
       if (!user?.id) return;
       
       try {
         setLoadingPets(true);
-        const { data, error } = await supabase
+        setLoadingAddresses(true);
+        
+        // Fetch pets
+        const { data: petsData, error: petsError } = await supabase
           .from('pets')
           .select('id, name, species, breed, image_url')
           .eq('owner_id', user.id)
           .order('created_at', { ascending: false });
         
-        if (error) throw error;
-        const petsData = data || [];
-        setPets(petsData);
+        if (petsError) throw petsError;
+        const petsList = petsData || [];
+        setPets(petsList);
         
         // Auto-select first pet for all items if only one pet exists
-        if (petsData.length === 1) {
-          const singlePetId = petsData[0].id;
+        if (petsList.length === 1) {
+          const singlePetId = petsList[0].id;
           const autoSelected: { [itemId: string]: string[] } = {};
           items.forEach(item => {
             autoSelected[item.id] = [singlePetId];
           });
           setSelectedPets(autoSelected);
         }
+
+        // Fetch addresses
+        const { data: addressesData, error: addressesError } = await supabase
+          .from('client_addresses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false });
+        
+        if (addressesError) throw addressesError;
+        const addressesList = addressesData || [];
+        setAddresses(addressesList);
+        
+        // Auto-select default address if exists
+        const defaultAddress = addressesList.find((addr: any) => addr.is_default);
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setUseSavedAddress(true);
+          setFormData(prev => ({
+            ...prev,
+            fullName: defaultAddress.full_name,
+            phone: defaultAddress.phone,
+            address: defaultAddress.address,
+            city: defaultAddress.city,
+            deliveryInstructions: defaultAddress.delivery_instructions || ''
+          }));
+        }
+
+        // Fetch payment cards
+        const { data: cardsData, error: cardsError } = await supabase
+          .from('payment_cards')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false });
+        
+        if (cardsError) throw cardsError;
+        const cardsList = cardsData || [];
+        setCards(cardsList);
+        
+        // Auto-select default card if exists
+        const defaultCard = cardsList.find((card: any) => card.is_default);
+        if (defaultCard) {
+          setSelectedCardId(defaultCard.id);
+          setUseSavedCard(true);
+          setFormData(prev => ({
+            ...prev,
+            paymentMethod: 'card'
+          }));
+        }
       } catch (error) {
-        console.error('Error fetching pets:', error);
+        console.error('Error fetching data:', error);
         setPets([]);
+        setAddresses([]);
+        setCards([]);
       } finally {
         setLoadingPets(false);
+        setLoadingAddresses(false);
       }
     };
 
     if (isOpen) {
-      fetchPets();
+      fetchData();
     }
   }, [user, isOpen, items.length]); // Add items.length to dependency to re-run when items change
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddressSelect = (addressId: string) => {
+    setSelectedAddressId(addressId);
+    const address = addresses.find(addr => addr.id === addressId);
+    if (address) {
+      setFormData(prev => ({
+        ...prev,
+        fullName: address.full_name,
+        phone: address.phone,
+        address: address.address,
+        city: address.city,
+        deliveryInstructions: address.delivery_instructions || ''
+      }));
+    }
+  };
+
+  const handleCardSelect = (cardId: string) => {
+    setSelectedCardId(cardId);
+    setFormData(prev => ({
+      ...prev,
+      paymentMethod: 'card'
+    }));
   };
 
   const togglePetSelection = (itemId: string, petId: string) => {
@@ -199,6 +286,69 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
         .single();
 
       if (orderError) throw orderError;
+
+      // Generate invoice number
+      const generateInvoiceNumber = () => {
+        const year = new Date().getFullYear();
+        const random = Math.random().toString(36).substr(2, 6).toUpperCase();
+        return `INV-${year}-${Date.now().toString().slice(-6)}-${random}`;
+      };
+
+      const invoiceNumber = generateInvoiceNumber();
+
+      // Get client information from user profile or form data
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('full_name, phone, address')
+        .eq('user_id', user?.id)
+        .maybeSingle(); // Use maybeSingle() to handle case when profile doesn't exist
+
+      // Create invoice
+      try {
+        const invoiceInsertData = {
+          order_id: orderData.id,
+          invoice_number: invoiceNumber,
+          client_id: user?.id,
+          client_name: formData.fullName || userProfile?.full_name || user?.email?.split('@')[0] || 'Cliente',
+          client_email: user?.email || null,
+          client_phone: formData.phone || userProfile?.phone || null,
+          client_address: formData.address || userProfile?.address || null,
+          client_city: formData.city || null,
+          subtotal: total,
+          delivery_fee: delivery_fee,
+          tax_amount: 0, // Can be calculated if needed
+          discount_amount: 0, // Can be calculated if needed
+          total_amount: grand_total,
+          currency: items[0]?.currency || 'GTQ',
+          payment_method: formData.paymentMethod,
+          payment_status: paymentStatus,
+          status: paymentStatus === 'completed' ? 'paid' : 'issued',
+          paid_at: paymentStatus === 'completed' ? new Date().toISOString() : null,
+          notes: formData.deliveryInstructions || null
+        };
+
+        const { data: invoiceData, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert(invoiceInsertData)
+          .select()
+          .single();
+
+        if (invoiceError) {
+          console.error('Error creating invoice:', invoiceError);
+          console.error('Invoice data that failed:', invoiceInsertData);
+          
+          // Check if it's a "table doesn't exist" error
+          if (invoiceError.code === '42P01' || invoiceError.message.includes('does not exist')) {
+            console.warn('⚠️ Invoices table does not exist. Please run the supabase_invoices_table.sql script in Supabase SQL Editor.');
+          }
+          // Don't throw error - order was created successfully, invoice is optional
+        } else {
+          console.log('✅ Invoice created successfully:', invoiceData);
+        }
+      } catch (invoiceErr: any) {
+        console.error('Unexpected error creating invoice:', invoiceErr);
+        // Don't throw - order was created successfully
+      }
 
       // Get provider user_ids for all items (needed for order_items foreign key)
       // The provider_id in cart items should be user_id, but we verify/convert if needed
@@ -345,16 +495,12 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
           const isValidTimeSlotId = timeSlotId && 
             !timeSlotId.startsWith('generated-') && 
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(timeSlotId);
-
-          // Get appointment time from service_data (slot_start_time in HH:MM format)
-          const appointmentTime = item.service_data?.appointment_time || null;
           
           const appointmentData = {
             service_id: item.service_data?.service_id,
             client_id: user?.id,
             provider_id: providerUserId, // Use user_id directly (foreign key expects users.id)
             appointment_date: item.service_data?.appointment_date,
-            appointment_time: appointmentTime, // Store the actual time (HH:MM format)
             time_slot_id: isValidTimeSlotId ? timeSlotId : null, // Only use valid UUIDs, otherwise null
             status: 'pending',
             client_name: item.service_data?.client_name,
@@ -380,7 +526,13 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
         if (appointmentsError) {
           console.error('Error creating service appointments:', appointmentsError);
           console.error('Appointments data that failed:', serviceAppointments);
-          // Don't throw error here, just log it - the order was created successfully
+          // Show warning toast but don't block the order completion
+          toast({
+            title: "⚠️ Advertencia",
+            description: "La orden se creó exitosamente, pero hubo un problema al crear algunas citas. Por favor, contacta al proveedor.",
+            variant: "destructive",
+            duration: 8000,
+          });
         } else {
           console.log('Successfully created service appointments:', insertedAppointments);
         }
@@ -637,68 +789,217 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
 
             <h3 className="text-lg font-semibold">Información de Entrega</h3>
             
+            {/* Saved Addresses Section */}
+            {addresses.length > 0 && (
+              <div className="mb-4">
+                <Label className="text-sm font-medium mb-2 block">Usar dirección guardada</Label>
+                <div className="flex items-center space-x-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="use-saved-address"
+                    checked={useSavedAddress}
+                    onChange={(e) => {
+                      setUseSavedAddress(e.target.checked);
+                      if (!e.target.checked) {
+                        setSelectedAddressId(null);
+                        setFormData(prev => ({
+                          ...prev,
+                          fullName: user?.email?.split('@')[0] || '',
+                          phone: '',
+                          address: '',
+                          city: '',
+                          deliveryInstructions: ''
+                        }));
+                      } else if (selectedAddressId) {
+                        handleAddressSelect(selectedAddressId);
+                      }
+                    }}
+                    className="rounded"
+                  />
+                  <Label htmlFor="use-saved-address" className="cursor-pointer text-sm">
+                    Seleccionar de mis direcciones guardadas
+                  </Label>
+                </div>
+                {useSavedAddress && (
+                  <Select value={selectedAddressId || ''} onValueChange={handleAddressSelect}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una dirección" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {addresses.map((address: any) => (
+                        <SelectItem key={address.id} value={address.id}>
+                          <div className="flex items-center space-x-2">
+                            <span>{address.label}</span>
+                            {address.is_default && (
+                              <Badge variant="default" className="ml-2 bg-orange-500">
+                                <Star size={10} className="mr-1" />
+                                Predeterminada
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="fullName">Nombre Completo *</Label>
-                <Input
-                  id="fullName"
-                  value={formData.fullName}
-                  onChange={(e) => handleInputChange('fullName', e.target.value)}
-                  placeholder="Tu nombre completo"
-                  required
-                />
-              </div>
+              {(!useSavedAddress || addresses.length === 0) && (
+                <>
+                  <div>
+                    <Label htmlFor="fullName">Nombre Completo *</Label>
+                    <Input
+                      id="fullName"
+                      value={formData.fullName}
+                      onChange={(e) => handleInputChange('fullName', e.target.value)}
+                      placeholder="Tu nombre completo"
+                      required
+                      disabled={useSavedAddress && selectedAddressId !== null}
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="phone">Teléfono *</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  placeholder="+502 1234-5678"
-                  required
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="phone">Teléfono *</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      placeholder="+502 1234-5678"
+                      required
+                      disabled={useSavedAddress && selectedAddressId !== null}
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="address">Dirección *</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="Dirección completa"
-                  required
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="address">Dirección *</Label>
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => handleInputChange('address', e.target.value)}
+                      placeholder="Dirección completa"
+                      required
+                      disabled={useSavedAddress && selectedAddressId !== null}
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="city">Ciudad *</Label>
-                <Input
-                  id="city"
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  placeholder="Ciudad"
-                  required
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="city">Ciudad *</Label>
+                    <Input
+                      id="city"
+                      value={formData.city}
+                      onChange={(e) => handleInputChange('city', e.target.value)}
+                      placeholder="Ciudad"
+                      required
+                      disabled={useSavedAddress && selectedAddressId !== null}
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="deliveryInstructions">Instrucciones de Entrega</Label>
-                <Textarea
-                  id="deliveryInstructions"
-                  value={formData.deliveryInstructions}
-                  onChange={(e) => handleInputChange('deliveryInstructions', e.target.value)}
-                  placeholder="Instrucciones especiales para la entrega..."
-                  rows={3}
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="deliveryInstructions">Instrucciones de Entrega</Label>
+                    <Textarea
+                      id="deliveryInstructions"
+                      value={formData.deliveryInstructions}
+                      onChange={(e) => handleInputChange('deliveryInstructions', e.target.value)}
+                      placeholder="Instrucciones especiales para la entrega..."
+                      rows={3}
+                      disabled={useSavedAddress && selectedAddressId !== null}
+                    />
+                  </div>
+                </>
+              )}
+
+              {useSavedAddress && selectedAddressId && (
+                <Card className="bg-gray-50 border-2 border-orange-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <MapPin className="w-5 h-5 text-orange-500" />
+                      <span className="font-semibold text-gray-800">
+                        {addresses.find((a: any) => a.id === selectedAddressId)?.label}
+                      </span>
+                      {addresses.find((a: any) => a.id === selectedAddressId)?.is_default && (
+                        <Badge variant="default" className="bg-orange-500">
+                          <Star size={10} className="mr-1" />
+                          Predeterminada
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p className="font-medium text-gray-800">{formData.fullName}</p>
+                      <p>{formData.phone}</p>
+                      <p>{formData.address}</p>
+                      <p>{formData.city}</p>
+                      {formData.deliveryInstructions && (
+                        <p className="text-xs text-gray-500 italic mt-2">
+                          {formData.deliveryInstructions}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Saved Payment Cards Section */}
+              {cards.length > 0 && formData.paymentMethod === 'card' && (
+                <div className="mb-4">
+                  <Label className="text-sm font-medium mb-2 block">Usar tarjeta guardada</Label>
+                  <div className="flex items-center space-x-2 mb-3">
+                    <input
+                      type="checkbox"
+                      id="use-saved-card"
+                      checked={useSavedCard}
+                      onChange={(e) => {
+                        setUseSavedCard(e.target.checked);
+                        if (!e.target.checked) {
+                          setSelectedCardId(null);
+                        } else if (selectedCardId) {
+                          handleCardSelect(selectedCardId);
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <Label htmlFor="use-saved-card" className="cursor-pointer text-sm">
+                      Seleccionar de mis tarjetas guardadas
+                    </Label>
+                  </div>
+                  {useSavedCard && (
+                    <Select value={selectedCardId || ''} onValueChange={handleCardSelect}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una tarjeta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cards.map((card: any) => (
+                          <SelectItem key={card.id} value={card.id}>
+                            <div className="flex items-center space-x-2">
+                              <span>{card.label} - **** {card.card_number_last_four}</span>
+                              {card.is_default && (
+                                <Badge variant="default" className="ml-2 bg-blue-500">
+                                  <Star size={10} className="mr-1" />
+                                  Predeterminada
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="paymentMethod">Método de Pago</Label>
                 <select
                   id="paymentMethod"
                   value={formData.paymentMethod}
-                  onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
+                  onChange={(e) => {
+                    handleInputChange('paymentMethod', e.target.value);
+                    if (e.target.value !== 'card') {
+                      setUseSavedCard(false);
+                      setSelectedCardId(null);
+                    }
+                  }}
                   className="w-full p-2 border border-gray-300 rounded-md"
                 >
                   <option value="card">Tarjeta de Crédito/Débito</option>
@@ -709,14 +1010,46 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
 
               {/* Payment Method Info */}
               {formData.paymentMethod === 'card' && (
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2">Información de Pago</h4>
-                  <p className="text-sm text-blue-800">
-                    💳 Para esta demostración, el pago se procesará automáticamente.
-                    <br />
-                    🔒 En producción, se integrará con pasarelas de pago seguras.
-                  </p>
-                </div>
+                <>
+                  {useSavedCard && selectedCardId && (
+                    <Card className="bg-blue-50 border-2 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <CreditCard className="w-5 h-5 text-blue-500" />
+                          <span className="font-semibold text-gray-800">
+                            {cards.find((c: any) => c.id === selectedCardId)?.label}
+                          </span>
+                          {cards.find((c: any) => c.id === selectedCardId)?.is_default && (
+                            <Badge variant="default" className="bg-blue-500">
+                              <Star size={10} className="mr-1" />
+                              Predeterminada
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <p className="font-mono text-lg font-semibold">
+                            **** **** **** {cards.find((c: any) => c.id === selectedCardId)?.card_number_last_four}
+                          </p>
+                          <p>{cards.find((c: any) => c.id === selectedCardId)?.card_holder_name}</p>
+                          <p>
+                            {cards.find((c: any) => c.id === selectedCardId)?.expiry_month.toString().padStart(2, '0')}/
+                            {cards.find((c: any) => c.id === selectedCardId)?.expiry_year}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {!useSavedCard && (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">Información de Pago</h4>
+                      <p className="text-sm text-blue-800">
+                        💳 Para esta demostración, el pago se procesará automáticamente.
+                        <br />
+                        🔒 En producción, se integrará con pasarelas de pago seguras.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="pt-4">

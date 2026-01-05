@@ -106,6 +106,7 @@ function App() {
                 <Route path="/trazabilidad" element={<Index />} />
                 <Route path="/feeding-schedules" element={<Index />} />
                 <Route path="/veterinaria" element={<Index />} />
+                <Route path="/recordatorios" element={<Index />} />
                 <Route path="/ajustes" element={<Index />} />
                 <Route path="/parejas" element={<Index />} />
                 <Route path="/mascotas-perdidas" element={<Index />} />

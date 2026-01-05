@@ -108,37 +108,30 @@ const ShelterDetails: React.FC = () => {
     );
   }
 
-  // Use real data from database or fallback to mock data
-  const images = shelterImages.length > 0 
-    ? shelterImages.map(img => {
-        // Check if it's already a full URL (external) or a storage path
-        if (img.image_url.startsWith('http')) {
-          return img.image_url;
-        }
-        return storage.getShelterImageUrl(img.image_url);
-      })
-    : [
-        shelter.image_url || 'https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=800&auto=format&fit=crop&ixlib=rb-4.0.3',
-        'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&auto=format&fit=crop&ixlib=rb-4.0.3',
-        'https://images.unsplash.com/photo-1587764379873-97837921fd44?w=800&auto=format&fit=crop&ixlib=rb-4.0.3',
-        'https://images.unsplash.com/photo-1558929996-da64ba858215?w=800&auto=format&fit=crop&ixlib=rb-4.0.3'
-      ];
+  // Use real data from database only
+  const images = shelterImages.map(img => {
+    // Check if it's already a full URL (external) or a storage path
+    if (img.image_url.startsWith('http')) {
+      return img.image_url;
+    }
+    return storage.getShelterImageUrl(img.image_url);
+  });
+  
+  // Add shelter main image if it exists and is not already in the images array
+  if (shelter?.image_url && !images.includes(shelter.image_url)) {
+    images.unshift(shelter.image_url);
+  }
 
-  const videos = shelterVideos.length > 0 
-    ? shelterVideos.map(video => ({
-        id: video.id,
-        title: video.title,
-        url: video.youtube_url,
-        thumbnail: video.thumbnail_url 
-          ? (video.thumbnail_url.startsWith('http') 
-              ? video.thumbnail_url 
-              : storage.getShelterImageUrl(video.thumbnail_url))
-          : 'https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=400&auto=format&fit=crop&ixlib=rb-4.0.3'
-      }))
-    : [
-        { id: 1, title: 'Tour del Albergue', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', thumbnail: 'https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=400' },
-        { id: 2, title: 'Historia de Rescate', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', thumbnail: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=400' }
-      ];
+  const videos = shelterVideos.map(video => ({
+    id: video.id,
+    title: video.title,
+    url: video.youtube_url,
+    thumbnail: video.thumbnail_url 
+      ? (video.thumbnail_url.startsWith('http') 
+          ? video.thumbnail_url 
+          : storage.getShelterImageUrl(video.thumbnail_url))
+      : 'https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=400&auto=format&fit=crop&ixlib=rb-4.0.3'
+  }));
 
   // Use real statistics from database or fallback to mock data
   const shelterStats = [

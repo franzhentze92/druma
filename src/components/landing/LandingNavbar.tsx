@@ -99,13 +99,13 @@ export const LandingNavbar: React.FC = () => {
                 {item.name}
               </Link>
             ))}
-            <div className="pt-4 space-y-3">
-              <Link to="/login">
+            <div className="pt-4 space-y-4">
+              <Link to="/login" className="block">
                 <Button variant="outline" className="w-full text-purple-600 hover:text-white border-purple-600 hover:bg-purple-600 transition-all duration-300 font-medium">
                   Iniciar Sesión
                 </Button>
               </Link>
-              <Link to="/register">
+              <Link to="/register" className="block mt-4">
                 <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 font-medium">
                   Registrarse
                   <Badge className="ml-2 bg-white/20 text-white text-xs px-2 py-0.5">Gratis</Badge>

@@ -9,6 +9,8 @@ interface AdoptionPetDetailsProps {
   isFavorite?: boolean
   onToggleFavorite?: () => void
   onApply?: () => void
+  applicationFeedback?: { type: 'success' | 'error', message: string } | null
+  hasApplied?: boolean
 }
 
 const Badge = ({ children, color = 'gray' }: { children: React.ReactNode; color?: 'purple' | 'blue' | 'gray' | 'green' | 'red' | 'orange' | 'yellow' }) => {
@@ -34,7 +36,7 @@ const Row = ({ label, value, icon }: { label: string; value: React.ReactNode; ic
   </div>
 )
 
-const AdoptionPetDetails: React.FC<AdoptionPetDetailsProps> = ({ open, onClose, pet, isFavorite, onToggleFavorite, onApply }) => {
+const AdoptionPetDetails: React.FC<AdoptionPetDetailsProps> = ({ open, onClose, pet, isFavorite, onToggleFavorite, onApply, applicationFeedback, hasApplied }) => {
   if (!pet) return null
 
   const ageText = pet.age ? `${pet.age} ${pet.age === 1 ? 'año' : 'años'}` : '—'
@@ -213,13 +215,36 @@ const AdoptionPetDetails: React.FC<AdoptionPetDetailsProps> = ({ open, onClose, 
             </div>
           )}
 
+          {/* Application Feedback - Shown at bottom before buttons */}
+          {applicationFeedback && (
+            <div className={`p-4 rounded-lg ${
+              applicationFeedback.type === 'success' 
+                ? 'bg-green-100 border border-green-300 text-green-800' 
+                : 'bg-red-100 border border-red-300 text-red-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                {applicationFeedback.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5" />
+                )}
+                <span className="font-medium">{applicationFeedback.message}</span>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t border-gray-200">
             <button
-              className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white py-3 rounded-lg text-sm font-semibold hover:from-pink-600 hover:to-rose-600 transition-all"
+              className={`flex-1 py-3 rounded-lg text-sm font-semibold transition-all ${
+                hasApplied
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:from-pink-600 hover:to-rose-600'
+              }`}
               onClick={onApply}
+              disabled={hasApplied}
             >
-              Solicitar Adopción
+              {hasApplied ? 'Solicitud ya enviada' : 'Solicitar Adopción'}
             </button>
             <button 
               className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-all" 

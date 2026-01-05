@@ -167,6 +167,7 @@ const Index: React.FC = () => {
         !location.pathname.startsWith('/parejas') && !location.pathname.startsWith('/mascotas-perdidas') &&
         !location.pathname.startsWith('/trazabilidad') &&
         !location.pathname.startsWith('/feeding-schedules') && !location.pathname.startsWith('/veterinaria') &&
+        !location.pathname.startsWith('/recordatorios') &&
         !location.pathname.startsWith('/meal-journal') && !location.pathname.startsWith('/adventure-log') && 
         !location.pathname.startsWith('/health-journal') && !location.pathname.startsWith('/pet-reminders') && 
         !location.pathname.startsWith('/deliveries') && !location.pathname.startsWith('/client-orders') &&

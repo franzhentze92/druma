@@ -88,26 +88,6 @@ export const AboutUs: React.FC = () => {
     }
   ];
 
-  const team = [
-    {
-      name: 'Dr. Carlos Méndez',
-      role: 'CEO & Fundador',
-      description: 'Veterinario con más de 15 años de experiencia en el cuidado animal.',
-      image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&h=400&fit=crop&crop=face'
-    },
-    {
-      name: 'Dra. Ana García',
-      role: 'Directora Médica',
-      description: 'Especialista en medicina interna veterinaria y bienestar animal.',
-      image: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=400&h=400&fit=crop&crop=face'
-    },
-    {
-      name: 'Ing. Roberto López',
-      role: 'CTO',
-      description: 'Experto en desarrollo de software y soluciones tecnológicas para el sector veterinario.',
-      image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face'
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-white">
@@ -288,145 +268,72 @@ export const AboutUs: React.FC = () => {
         </div>
       </section>
 
-      {/* Story Section */}
-      <section className="py-20 bg-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full mb-6">
-              <Calendar className="w-4 h-4" />
-              <span className="font-medium">Nuestra Historia</span>
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Un viaje de innovación y crecimiento
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Desde nuestros humildes comienzos hasta convertirnos en la plataforma líder 
-              en cuidado de mascotas en Guatemala.
-            </p>
-          </div>
-          
-          <div className="space-y-12">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-              <div className="lg:col-span-2">
-                <div className="bg-gradient-to-br from-green-50 to-teal-50 p-8 rounded-2xl border border-green-100 shadow-lg">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center">
-                      <Zap className="w-5 h-5 text-white" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900">Los Inicios (2022)</h3>
-                  </div>
-                  <p className="text-gray-600 leading-relaxed">
-                    PetHub nació de la visión de un grupo de veterinarios y desarrolladores 
-                    que identificaron la necesidad de una plataforma integral para el cuidado de mascotas 
-                    en Guatemala. Comenzamos como un pequeño proyecto local con grandes sueños.
-                  </p>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-full w-24 h-24 flex items-center justify-center mx-auto">
-                  <span className="text-2xl font-bold">2022</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-              <div className="text-center lg:order-1">
-                <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full w-24 h-24 flex items-center justify-center mx-auto">
-                  <span className="text-2xl font-bold">2024</span>
-                </div>
-              </div>
-              <div className="lg:col-span-2 lg:order-2">
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-8 rounded-2xl border border-blue-100 shadow-lg">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                      <TrendingUp className="w-5 h-5 text-white" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900">El Crecimiento</h3>
-                  </div>
-                  <p className="text-gray-600 leading-relaxed">
-                    En solo dos años, hemos conectado a más de 10,000 familias con sus mascotas, 
-                    facilitado cientos de adopciones responsables y creado una red de más de 500 
-                    veterinarios y proveedores de servicios comprometidos con el bienestar animal.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-              <div className="lg:col-span-2">
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-8 rounded-2xl border border-purple-100 shadow-lg">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                      <Award className="w-5 h-5 text-white" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900">El Futuro</h3>
-                  </div>
-                  <p className="text-gray-600 leading-relaxed">
-                    Continuamos innovando y expandiendo nuestros servicios para incluir nuevas 
-                    tecnologías como IA para diagnóstico temprano, telemedicina veterinaria y 
-                    herramientas avanzadas de trazabilidad para el cuidado preventivo.
-                  </p>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-full w-24 h-24 flex items-center justify-center mx-auto">
-                  <span className="text-2xl font-bold">∞</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Team Section */}
+      {/* Founder Message Section */}
       <section className="py-20 bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-800 px-4 py-2 rounded-full mb-6">
-              <Users className="w-4 h-4" />
-              <span className="font-medium">Nuestro Equipo</span>
+              <Heart className="w-4 h-4" />
+              <span className="font-medium">Mensaje del Fundador</span>
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Conoce a nuestro equipo
+              Un mensaje de nuestro fundador
             </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Las personas apasionadas y expertas que hacen posible PetHub día a día.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {team.map((member, index) => (
-              <Card key={index} className="text-center border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2 group">
-                <CardHeader className="pb-4">
-                  <div className="relative">
-                    <img 
-                      src={member.image} 
-                      alt={member.name}
-                      className="w-32 h-32 rounded-full mx-auto mb-4 object-cover border-4 border-white shadow-lg group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2">
-                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full p-2">
-                        <MessageCircle className="w-4 h-4" />
-                      </div>
-                    </div>
+          <Card className="border-0 shadow-xl overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-8">
+              {/* Founder Image */}
+              <div className="flex flex-col items-center md:items-start">
+                <div className="relative mb-6">
+                  <img 
+                    src="/Franz Hentze.png" 
+                    alt="Franz Hentze - Fundador de PetHub"
+                    className="w-48 h-48 rounded-full object-cover border-4 border-purple-200 shadow-lg"
+                  />
+                  <div className="absolute -bottom-2 -right-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full p-3 shadow-lg">
+                    <Award className="w-6 h-6" />
                   </div>
-                  <CardTitle className="text-xl font-semibold text-gray-900">
-                    {member.name}
-                  </CardTitle>
-                  <div className="flex items-center justify-center gap-2">
-                    <Badge className="bg-purple-100 text-purple-800 px-3 py-1">
-                      {member.role}
-                    </Badge>
+                </div>
+                <div className="text-center md:text-left">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    Franz Hentze
+                  </h3>
+                  <Badge className="bg-purple-100 text-purple-800 px-4 py-2 text-base">
+                    Fundador & CEO
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Founder Message */}
+              <div className="md:col-span-2 space-y-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                    <span className="text-white text-lg font-bold">"</span>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600 leading-relaxed">
-                    {member.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <div className="flex-1">
+                    <p className="text-lg text-gray-700 leading-relaxed">
+                      PetHub nació de una visión simple pero poderosa: crear un mundo donde cada mascota 
+                      reciba el amor, cuidado y atención que merece. Nuestra plataforma conecta corazones, 
+                      facilita el cuidado responsable y promueve el bienestar animal.
+                    </p>
+                    <p className="text-lg text-gray-700 leading-relaxed mt-4">
+                      Te invito a unirte a esta misión. Juntos, podemos transformar la forma en que 
+                      cuidamos a nuestros compañeros de cuatro patas.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+                  <Heart className="w-5 h-5 text-purple-600" />
+                  <span className="text-gray-600 font-medium">Con amor y dedicación,</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-800 font-semibold">Franz Hentze</p>
+                  <p className="text-sm text-gray-600">Fundador de PetHub</p>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
       </section>
 

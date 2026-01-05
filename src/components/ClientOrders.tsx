@@ -34,6 +34,8 @@ import {
 import PageHeader from './PageHeader';
 import { useNavigation } from '@/contexts/NavigationContext';
 import ReviewModal from './ReviewModal';
+import InvoiceViewer from './InvoiceViewer';
+import { FileText } from 'lucide-react';
 
 interface Order {
   id: string;
@@ -91,6 +93,8 @@ const ClientOrders: React.FC = () => {
   const [reviewedOrders, setReviewedOrders] = useState<Set<string>>(new Set());
   const [checkedOrders, setCheckedOrders] = useState<Set<string>>(new Set());
   const [orderReviews, setOrderReviews] = useState<Map<string, any[]>>(new Map());
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceOrderId, setInvoiceOrderId] = useState<string | null>(null);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -291,6 +295,11 @@ const ClientOrders: React.FC = () => {
   const handleReviewOrder = (orderId: string) => {
     setReviewOrderId(orderId);
     setShowReviewModal(true);
+  };
+
+  const handleViewInvoice = (orderId: string) => {
+    setInvoiceOrderId(orderId);
+    setShowInvoice(true);
   };
 
   const handleReviewSubmitted = () => {
@@ -663,19 +672,19 @@ const ClientOrders: React.FC = () => {
                 {filteredData.map((order) => (
                   <Card key={order.id} className="hover:shadow-lg transition-shadow">
                     <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900">
                               Orden #{order.order_number}
                             </h3>
                             <Badge 
-                              className={getStatusBadge(order.status).className}
+                              className={`${getStatusBadge(order.status).className} flex-shrink-0`}
                             >
                               {getStatusBadge(order.status).text}
                             </Badge>
                             <Badge 
-                              className={getPaymentStatusBadge(order.payment_status).className}
+                              className={`${getPaymentStatusBadge(order.payment_status).className} flex-shrink-0`}
                             >
                               {getPaymentStatusBadge(order.payment_status).text}
                             </Badge>
@@ -683,7 +692,7 @@ const ClientOrders: React.FC = () => {
                           <p className="text-sm text-gray-600 mb-2">
                             {formatDate(order.created_at)}
                           </p>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                             <div className="flex items-center gap-1">
                               <Package className="w-4 h-4" />
                               {order.order_items?.length || 0} producto{(order.order_items?.length || 0) !== 1 ? 's' : ''}
@@ -696,7 +705,7 @@ const ClientOrders: React.FC = () => {
                                 const orderTypeColor = hasProducts && hasServices ? 'text-purple-600' : hasProducts ? 'text-blue-600' : 'text-emerald-600';
                                 const OrderTypeIcon = hasProducts && hasServices ? Package : hasProducts ? Package : Calendar;
                                 return (
-                                  <Badge variant="outline" className={`text-xs ${orderTypeColor} border-current flex items-center gap-1`}>
+                                  <Badge variant="outline" className={`text-xs ${orderTypeColor} border-current flex items-center gap-1 flex-shrink-0`}>
                                     <OrderTypeIcon className="w-3 h-3" />
                                     {orderType}
                                   </Badge>
@@ -709,7 +718,7 @@ const ClientOrders: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
                           <Button
                             variant="outline"
                             size="sm"
@@ -719,6 +728,16 @@ const ClientOrders: React.FC = () => {
                             <Eye className="w-4 h-4" />
                             <span className="hidden sm:inline">Ver Detalles</span>
                             <span className="sm:hidden">Detalles</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewInvoice(order.id)}
+                            className="flex items-center gap-2 flex-1 sm:flex-initial bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                          >
+                            <FileText className="w-4 h-4" />
+                            <span className="hidden sm:inline">Factura</span>
+                            <span className="sm:hidden">Factura</span>
                           </Button>
                           {order.status === 'delivered' && !reviewedOrders.has(order.id) && (
                             <Button
@@ -922,14 +941,14 @@ const ClientOrders: React.FC = () => {
                 {filteredData.map((reservation) => (
                   <Card key={reservation.id} className="hover:shadow-lg transition-shadow">
                     <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900">
                               {reservation.service_name || reservation.service?.service_name || reservation.provider_services?.service_name || `Servicio #${reservation.id?.slice(-8) || 'N/A'}`}
                             </h3>
                             <Badge 
-                              className={getStatusBadge(reservation.status).className}
+                              className={`${getStatusBadge(reservation.status).className} flex-shrink-0`}
                             >
                               {getStatusBadge(reservation.status).text}
                             </Badge>
@@ -942,7 +961,7 @@ const ClientOrders: React.FC = () => {
                               </span>
                             )}
                           </p>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
                               {reservation.provider_name || reservation.service?.providers?.business_name || reservation.provider_services?.providers?.business_name || `Proveedor #${reservation.provider_id?.slice(-8) || 'N/A'}`}
@@ -953,7 +972,7 @@ const ClientOrders: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Button
                             variant="outline"
                             size="sm"
@@ -1217,6 +1236,18 @@ const ClientOrders: React.FC = () => {
           orderId={reviewOrderId}
           orderItems={orders.find(o => o.id === reviewOrderId)?.order_items || []}
           onReviewSubmitted={handleReviewSubmitted}
+        />
+      )}
+
+      {/* Invoice Viewer */}
+      {invoiceOrderId && (
+        <InvoiceViewer
+          isOpen={showInvoice}
+          onClose={() => {
+            setShowInvoice(false);
+            setInvoiceOrderId(null);
+          }}
+          orderId={invoiceOrderId}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   useShelter, 
   useAdoptionPetsByShelter, 
@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -53,10 +53,32 @@ import {
   Image,
   Play,
   Grid,
-  List
+  List,
+  MessageCircle,
+  Send,
+  Loader2,
+  TrendingUp,
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { storage, fileValidation } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
+import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale/es';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
 
 interface Pet {
   id: string;
@@ -97,32 +119,32 @@ interface Quote {
 const ShelterDashboard: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<string>(() => {
-    try {
-      return localStorage.getItem('shelterDashboardActiveTab') || 'profile';
-    } catch {
-      return 'profile';
-    }
+    // Check if navigation state has activeTab
+    const state = location.state as { activeTab?: string } | null;
+    return state?.activeTab || 'dashboard';
   });
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    try {
-      localStorage.setItem('shelterDashboardActiveTab', value);
-    } catch {
-      // ignore storage errors
-    }
+    // Removed localStorage persistence to always start with dashboard
   };
+
+  // Check navigation state for activeTab on mount and when location changes
+  useEffect(() => {
+    const state = location.state as { activeTab?: string } | null;
+    if (state?.activeTab) {
+      setActiveTab(state.activeTab);
+      // Clear the state to prevent it from persisting
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Listen for tab change events from SettingsDropdown
   useEffect(() => {
     const handleTabChangeEvent = (event: CustomEvent) => {
       setActiveTab(event.detail);
-      try {
-        localStorage.setItem('shelterDashboardActiveTab', event.detail);
-      } catch {
-        // ignore storage errors
-      }
     };
 
     window.addEventListener('shelterDashboardTabChange', handleTabChangeEvent as EventListener);
@@ -176,6 +198,17 @@ const ShelterDashboard: React.FC = () => {
     status: '',
     dateRange: ''
   });
+  
+  // Chat state
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [chatRoom, setChatRoom] = useState<any | null>(null);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatSubscriptionRef = useRef<any>(null);
   const [newPet, setNewPet] = useState({
     name: '',
     species: 'Dog',
@@ -197,6 +230,202 @@ const ShelterDashboard: React.FC = () => {
     medical_notes: '',
     adoption_fee: '',
     location: ''
+  });
+
+  // Lista completa de razas de perros
+  const dogBreeds = [
+    'Mestizo',
+    'Afgano',
+    'Airedale Terrier',
+    'Akita',
+    'Akita Americano',
+    'Alaskan Malamute',
+    'American Bulldog',
+    'American Pit Bull Terrier',
+    'American Staffordshire Terrier',
+    'American Water Spaniel',
+    'Australian Cattle Dog',
+    'Australian Kelpie',
+    'Australian Shepherd',
+    'Australian Terrier',
+    'Azawakh',
+    'Basenji',
+    'Basset Hound',
+    'Beagle',
+    'Bearded Collie',
+    'Bedlington Terrier',
+    'Belgian Malinois',
+    'Belgian Shepherd',
+    'Belgian Tervuren',
+    'Bergamasco',
+    'Bernese Mountain Dog',
+    'Bichon Frisé',
+    'Bichon Maltés',
+    'Black and Tan Coonhound',
+    'Bloodhound',
+    'Border Collie',
+    'Border Terrier',
+    'Borzoi',
+    'Boston Terrier',
+    'Bouvier des Flandres',
+    'Boxer',
+    'Boykin Spaniel',
+    'Bracco Italiano',
+    'Briard',
+    'Brittany',
+    'Brussels Griffon',
+    'Bull Terrier',
+    'Bulldog',
+    'Bulldog Francés',
+    'Bullmastiff',
+    'Cairn Terrier',
+    'Cane Corso',
+    'Cardigan Welsh Corgi',
+    'Cavalier King Charles Spaniel',
+    'Chesapeake Bay Retriever',
+    'Chihuahua',
+    'Chinese Crested',
+    'Chin',
+    'Chow Chow',
+    'Clumber Spaniel',
+    'Cocker Spaniel',
+    'Cocker Spaniel Americano',
+    'Collie',
+    'Coonhound',
+    'Curly-Coated Retriever',
+    'Dachshund',
+    'Dalmatian',
+    'Dandie Dinmont Terrier',
+    'Doberman Pinscher',
+    'Dogo Argentino',
+    'Dogo de Burdeos',
+    'English Cocker Spaniel',
+    'English Foxhound',
+    'English Setter',
+    'English Springer Spaniel',
+    'English Toy Spaniel',
+    'Field Spaniel',
+    'Finnish Spitz',
+    'Flat-Coated Retriever',
+    'Fox Terrier',
+    'Foxhound',
+    'French Bulldog',
+    'German Pinscher',
+    'German Shepherd',
+    'German Shorthaired Pointer',
+    'German Wirehaired Pointer',
+    'Giant Schnauzer',
+    'Glen of Imaal Terrier',
+    'Golden Retriever',
+    'Gordon Setter',
+    'Great Dane',
+    'Great Pyrenees',
+    'Greater Swiss Mountain Dog',
+    'Greyhound',
+    'Harrier',
+    'Havanese',
+    'Ibizan Hound',
+    'Irish Red and White Setter',
+    'Irish Setter',
+    'Irish Terrier',
+    'Irish Water Spaniel',
+    'Irish Wolfhound',
+    'Italian Greyhound',
+    'Jack Russell Terrier',
+    'Japanese Chin',
+    'Keeshond',
+    'Kerry Blue Terrier',
+    'Komondor',
+    'Kuvasz',
+    'Labrador Retriever',
+    'Lagotto Romagnolo',
+    'Lakeland Terrier',
+    'Leonberger',
+    'Lhasa Apso',
+    'Lowchen',
+    'Maltese',
+    'Manchester Terrier',
+    'Mastiff',
+    'Miniature Bull Terrier',
+    'Miniature Pinscher',
+    'Miniature Schnauzer',
+    'Neapolitan Mastiff',
+    'Newfoundland',
+    'Norfolk Terrier',
+    'Norwegian Buhund',
+    'Norwegian Elkhound',
+    'Norwich Terrier',
+    'Nova Scotia Duck Tolling Retriever',
+    'Old English Sheepdog',
+    'Otterhound',
+    'Papillon',
+    'Parson Russell Terrier',
+    'Pekingese',
+    'Pembroke Welsh Corgi',
+    'Petit Basset Griffon Vendéen',
+    'Pharaoh Hound',
+    'Plott',
+    'Pointer',
+    'Polish Lowland Sheepdog',
+    'Pomeranian',
+    'Poodle',
+    'Poodle Estándar',
+    'Poodle Miniatura',
+    'Poodle Toy',
+    'Portuguese Water Dog',
+    'Pug',
+    'Puli',
+    'Pumi',
+    'Rat Terrier',
+    'Redbone Coonhound',
+    'Rhodesian Ridgeback',
+    'Rottweiler',
+    'Saint Bernard',
+    'Saluki',
+    'Samoyed',
+    'Schipperke',
+    'Schnauzer',
+    'Schnauzer Estándar',
+    'Scottish Deerhound',
+    'Scottish Terrier',
+    'Sealyham Terrier',
+    'Shar Pei',
+    'Shetland Sheepdog',
+    'Shiba Inu',
+    'Shih Tzu',
+    'Siberian Husky',
+    'Silky Terrier',
+    'Skye Terrier',
+    'Smooth Fox Terrier',
+    'Soft Coated Wheaten Terrier',
+    'Spinone Italiano',
+    'Staffordshire Bull Terrier',
+    'Standard Schnauzer',
+    'Sussex Spaniel',
+    'Swedish Vallhund',
+    'Tibetan Mastiff',
+    'Tibetan Spaniel',
+    'Tibetan Terrier',
+    'Toy Fox Terrier',
+    'Treeing Walker Coonhound',
+    'Vizsla',
+    'Weimaraner',
+    'Welsh Springer Spaniel',
+    'Welsh Terrier',
+    'West Highland White Terrier',
+    'Whippet',
+    'Wire Fox Terrier',
+    'Wirehaired Pointing Griffon',
+    'Xoloitzcuintli',
+    'Yorkshire Terrier',
+    'Otra'
+  ].sort((a, b) => {
+    // Mantener "Mestizo" y "Otra" al final
+    if (a === 'Mestizo') return -1;
+    if (b === 'Mestizo') return 1;
+    if (a === 'Otra') return 1;
+    if (b === 'Otra') return -1;
+    return a.localeCompare(b);
   });
 
 
@@ -307,10 +536,10 @@ const ShelterDashboard: React.FC = () => {
   if (imagesError) console.error('Images error:', imagesError);
   if (videosError) console.error('Videos error:', videosError);
 
-  // Use mock data for testing when real data is not available
-  const isUsingMockData = pets.length === 0;
-  const displayPets = pets.length > 0 ? pets : mockPets;
-  const displayQuotes = quotes.length > 0 ? quotes : mockQuotes;
+  // Use real data only - no mock data
+  const isUsingMockData = false;
+  const displayPets = pets;
+  const displayQuotes = quotes;
 
   // Filter pets based on current filters
   const filteredPets = displayPets.filter(pet => {
@@ -391,7 +620,7 @@ const ShelterDashboard: React.FC = () => {
 
   const handleCreateShelter = async () => {
     if (!user?.id || !newShelter.name.trim()) {
-      toast({ title: 'Campo requerido', description: 'El nombre del albergue es obligatorio' });
+      toast.error('El nombre del albergue es obligatorio');
       return;
     }
 
@@ -409,19 +638,19 @@ const ShelterDashboard: React.FC = () => {
       setShowShelterForm(false);
       
       // Show success message
-      toast({ title: 'Albergue creado', description: '¡Albergue creado exitosamente!' });
+      toast.success('¡Albergue creado exitosamente!');
       
       // Refresh data without page reload
       queryClient.invalidateQueries({ queryKey: ['shelter', user.id] });
     } catch (error) {
       console.error('Error creating shelter:', error);
-      toast({ title: 'Error', description: 'Error al crear el albergue. Por favor, intenta de nuevo.', variant: 'destructive' });
+      toast.error('Error al crear el albergue. Por favor, intenta de nuevo.');
     }
   };
 
   const handleSaveProfile = async () => {
     if (!user?.id) {
-      toast({ title: 'Error de autenticación', description: 'No se pudo identificar el usuario', variant: 'destructive' });
+      toast.error('No se pudo identificar el usuario');
       return;
     }
 
@@ -440,7 +669,7 @@ const ShelterDashboard: React.FC = () => {
 
       if (tableError) {
         console.error('Shelters table error:', tableError);
-        toast({ title: 'Error de base de datos', description: `La tabla 'shelters' no existe o no es accesible. ${tableError.message}`, variant: 'destructive' });
+        toast.error(`La tabla 'shelters' no existe o no es accesible. ${tableError.message}`);
         return;
       }
 
@@ -453,7 +682,7 @@ const ShelterDashboard: React.FC = () => {
 
       if (checkError) {
         console.error('Error checking for existing shelter:', checkError);
-        toast({ title: 'Error', description: `Error al verificar el albergue existente: ${checkError.message}`, variant: 'destructive' });
+        toast.error(`Error al verificar el albergue existente: ${checkError.message}`);
         return;
       }
 
@@ -480,7 +709,7 @@ const ShelterDashboard: React.FC = () => {
 
         if (createError) {
           console.error('Error creating new shelter:', createError);
-          toast({ title: 'Error', description: `Error al crear el albergue: ${createError.message}`, variant: 'destructive' });
+          toast.error(`Error al crear el albergue: ${createError.message}`);
           return;
         }
 
@@ -505,7 +734,7 @@ const ShelterDashboard: React.FC = () => {
 
         if (updateError) {
           console.error('Error updating shelter:', updateError);
-          toast({ title: 'Error', description: `Error al actualizar el albergue: ${updateError.message}`, variant: 'destructive' });
+          toast.error(`Error al actualizar el albergue: ${updateError.message}`);
           return;
         }
 
@@ -516,22 +745,22 @@ const ShelterDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['shelter', user.id] });
       queryClient.invalidateQueries({ queryKey: ['shelters'] });
 
-      toast({ title: 'Perfil actualizado', description: 'Los cambios fueron guardados correctamente' });
+      toast.success('Los cambios fueron guardados correctamente');
       
       console.log('Profile saved successfully, form data preserved');
     } catch (error) {
       console.error('Error saving profile:', error);
-      toast({ title: 'Error al guardar', description: `Error inesperado: ${error.message}`, variant: 'destructive' });
+      toast.error(`Error inesperado: ${error.message}`);
     }
   };
 
   const validatePetForm = () => {
     if (!newPet.name.trim()) {
-      toast({ title: 'Campo requerido', description: 'El nombre de la mascota es obligatorio' });
+      toast.error('El nombre de la mascota es obligatorio');
       return false;
     }
     if (!newPet.age || parseInt(newPet.age) < 0) {
-      toast({ title: 'Dato inválido', description: 'La edad debe ser un número válido mayor o igual a 0', variant: 'destructive' });
+      toast.error('La edad debe ser un número válido mayor o igual a 0');
       return false;
     }
     return true;
@@ -571,10 +800,7 @@ const ShelterDashboard: React.FC = () => {
       
       // Invalidate pets list and show toast
       queryClient.invalidateQueries({ queryKey: ['adoption-pets-by-shelter', user.id] });
-      toast({ 
-        title: 'Mascota agregada exitosamente', 
-        description: `${newPet.name} ha sido agregada al albergue correctamente` 
-      });
+      toast.success(`${newPet.name} ha sido agregada al albergue correctamente`);
       setShowAddPetForm(false);
       setNewPet({
         name: '',
@@ -586,6 +812,7 @@ const ShelterDashboard: React.FC = () => {
         color: '',
         weight: '',
         description: '',
+        image_url: '',
         good_with_kids: false,
         good_with_dogs: false,
         good_with_cats: false,
@@ -600,18 +827,14 @@ const ShelterDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error adding pet:', error);
       const errorMessage = error?.message || error?.details || 'Error desconocido';
-      toast({ title: 'Error', description: `No se pudo agregar la mascota: ${errorMessage}`, variant: 'destructive' });
+      toast.error(`No se pudo agregar la mascota: ${errorMessage}`);
     }
   };
 
   const handleEditPet = (pet: Pet) => {
     // Prevent editing mock pets
     if (isUsingMockData) {
-      toast({ 
-        title: 'No disponible', 
-        description: 'No puedes editar mascotas de ejemplo. Agrega una mascota real primero.', 
-        variant: 'destructive' 
-      });
+      toast.error('No puedes editar mascotas de ejemplo. Agrega una mascota real primero.');
       return;
     }
     
@@ -676,10 +899,7 @@ const ShelterDashboard: React.FC = () => {
       
       // Invalidate list and notify
       queryClient.invalidateQueries({ queryKey: ['adoption-pets-by-shelter', user?.id] });
-      toast({ 
-        title: 'Mascota actualizada exitosamente', 
-        description: `La información de ${newPet.name} ha sido actualizada correctamente` 
-      });
+      toast.success(`La información de ${newPet.name} ha sido actualizada correctamente`);
       setEditingPet(null);
       setShowAddPetForm(false);
       setNewPet({
@@ -692,6 +912,7 @@ const ShelterDashboard: React.FC = () => {
         color: '',
         weight: '',
         description: '',
+        image_url: '',
         good_with_kids: false,
         good_with_dogs: false,
         good_with_cats: false,
@@ -706,7 +927,7 @@ const ShelterDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error updating pet:', error);
       const errorMessage = error?.message || error?.details || 'Error desconocido';
-      toast({ title: 'Error', description: `No se pudo actualizar la mascota: ${errorMessage}`, variant: 'destructive' });
+      toast.error(`No se pudo actualizar la mascota: ${errorMessage}`);
     }
   };
 
@@ -719,29 +940,270 @@ const ShelterDashboard: React.FC = () => {
           petId,
           shelterId: currentShelter.id
         });
-        toast({ 
-          title: 'Mascota eliminada exitosamente', 
-          description: 'La mascota ha sido eliminada del albergue correctamente' 
-        });
+        toast.success('La mascota ha sido eliminada del albergue correctamente');
       } catch (error) {
         console.error('Error deleting pet:', error);
-        toast({ 
-          title: 'Error al eliminar mascota', 
-          description: `No se pudo eliminar la mascota: ${error.message}`, 
-          variant: 'destructive' 
-        });
+        toast.error(`No se pudo eliminar la mascota: ${error.message}`);
       }
     }
   };
 
+  // Chat functions
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const loadOrCreateChatRoom = async () => {
+    if (!selectedApplication || !user) return;
+
+    try {
+      setLoadingChat(true);
+
+      // Get pet owner information
+      const { data: petData, error: petError } = await supabase
+        .from('adoption_pets')
+        .select('shelter_id, owner_id')
+        .eq('id', selectedApplication.pet_id)
+        .maybeSingle();
+
+      if (petError && petError.code !== 'PGRST116') {
+        console.error('Error fetching pet data:', petError);
+      }
+
+      const shelterOwnerId = petData?.owner_id;
+      const applicantId = selectedApplication.applicant_id;
+
+      // Ensure we have both parties
+      if (!shelterOwnerId || !applicantId) {
+        toast.error('No se pudo identificar a los participantes del chat');
+        return;
+      }
+
+      // First, try to find existing chat room
+      const { data: existingRoom, error: fetchError } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .eq('adoption_application_id', selectedApplication.id)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error fetching chat room:', fetchError);
+      }
+
+      if (existingRoom) {
+        setChatRoom(existingRoom);
+        return;
+      }
+
+      // If no existing room, create a new one
+      const { data: newRoom, error: createError } = await supabase
+        .from('chat_rooms')
+        .insert({
+          adoption_application_id: selectedApplication.id,
+          owner1_id: applicantId,
+          owner2_id: shelterOwnerId
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating chat room:', createError);
+        toast.error('Error al crear el chat. Asegúrate de que la tabla chat_rooms tenga el campo adoption_application_id.');
+        return;
+      }
+
+      setChatRoom(newRoom);
+
+    } catch (error) {
+      console.error('Error loading/creating chat room:', error);
+      toast.error('Error al cargar el chat');
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  const loadMessages = async () => {
+    if (!chatRoom) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('chat_room_id', chatRoom.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error loading messages:', error);
+        return;
+      }
+
+      setChatMessages(data || []);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    }
+  };
+
+  const subscribeToMessages = () => {
+    if (!chatRoom) return;
+
+    // Unsubscribe from previous subscription if it exists
+    if (chatSubscriptionRef.current) {
+      chatSubscriptionRef.current.unsubscribe();
+    }
+
+    const subscription = supabase
+      .channel(`adoption_chat_${chatRoom.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `chat_room_id=eq.${chatRoom.id}`
+      }, (payload) => {
+        setChatMessages(prev => {
+          // Check if message already exists to avoid duplicates
+          const messageExists = prev.some(msg => msg.id === payload.new.id);
+          if (messageExists) {
+            return prev;
+          }
+          return [...prev, payload.new as any];
+        });
+        // Scroll to bottom when new message arrives
+        setTimeout(() => scrollToBottom(), 100);
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to chat messages');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Error subscribing to chat messages');
+        }
+      });
+
+    chatSubscriptionRef.current = subscription;
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !chatRoom || !user || sending) return;
+
+    const messageText = newMessage.trim();
+    const tempId = `temp-${Date.now()}`;
+    
+    // Create optimistic message
+    const optimisticMessage = {
+      id: tempId,
+      chat_room_id: chatRoom.id,
+      sender_id: user.id,
+      message: messageText,
+      message_type: 'text',
+      created_at: new Date().toISOString(),
+      read_at: null
+    };
+
+    // Add message optimistically to UI
+    setChatMessages(prev => [...prev, optimisticMessage as any]);
+    setNewMessage('');
+    scrollToBottom();
+
+    try {
+      setSending(true);
+
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .insert({
+          chat_room_id: chatRoom.id,
+          sender_id: user.id,
+          message: messageText,
+          message_type: 'text'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error sending message:', error);
+        toast.error('Error al enviar el mensaje');
+        // Remove optimistic message on error
+        setChatMessages(prev => prev.filter(msg => msg.id !== tempId));
+        setNewMessage(messageText); // Restore message text
+        return;
+      }
+
+      // Replace optimistic message with real one
+      if (data) {
+        setChatMessages(prev => {
+          const filtered = prev.filter(msg => msg.id !== tempId);
+          // Check if message already exists (from subscription)
+          const exists = filtered.some(msg => msg.id === data.id);
+          if (exists) {
+            return filtered;
+          }
+          return [...filtered, data];
+        });
+        setTimeout(() => scrollToBottom(), 100);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Error al enviar el mensaje');
+      // Remove optimistic message on error
+      setChatMessages(prev => prev.filter(msg => msg.id !== tempId));
+      setNewMessage(messageText); // Restore message text
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+
+    if (minutes < 1) return 'Ahora';
+    if (minutes < 60) return `Hace ${minutes} min`;
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Chat useEffect hooks
+  useEffect(() => {
+    if (showChatModal && selectedApplication) {
+      loadOrCreateChatRoom();
+    } else {
+      // Cleanup when modal closes
+      if (chatSubscriptionRef.current) {
+        chatSubscriptionRef.current.unsubscribe();
+        chatSubscriptionRef.current = null;
+      }
+      setChatRoom(null);
+      setChatMessages([]);
+      setNewMessage('');
+    }
+  }, [showChatModal, selectedApplication]);
+
+  // Load messages when chat room is available
+  useEffect(() => {
+    if (chatRoom) {
+      loadMessages();
+      subscribeToMessages();
+    }
+    
+    return () => {
+      if (chatSubscriptionRef.current) {
+        chatSubscriptionRef.current.unsubscribe();
+        chatSubscriptionRef.current = null;
+      }
+    };
+  }, [chatRoom]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages]);
+
   const handleQuoteAction = async (quoteId: string, action: 'approved' | 'rejected') => {
     if (!currentShelter) {
       console.error('No current shelter found');
-      toast({ 
-        title: 'Error', 
-        description: 'No se encontró el albergue actual', 
-        variant: 'destructive' 
-      });
+      toast.error('No se encontró el albergue actual');
       return;
     }
     
@@ -755,27 +1217,16 @@ const ShelterDashboard: React.FC = () => {
         shelterId: currentShelter.id
       }, {
         onSuccess: () => {
-          toast({ 
-            title: 'Solicitud actualizada', 
-            description: `La solicitud ha sido ${action === 'approved' ? 'aprobada' : 'rechazada'} exitosamente` 
-          });
+          toast.success(`La solicitud ha sido ${action === 'approved' ? 'aprobada' : 'rechazada'} exitosamente`);
         },
         onError: (error) => {
           console.error('Error updating application:', error);
-          toast({ 
-            title: 'Error', 
-            description: `No se pudo actualizar la solicitud: ${error.message || 'Error desconocido'}`, 
-            variant: 'destructive' 
-          });
+          toast.error(`No se pudo actualizar la solicitud: ${error.message || 'Error desconocido'}`);
         }
       });
     } catch (error) {
       console.error('Error updating application:', error);
-      toast({ 
-        title: 'Error', 
-        description: `No se pudo actualizar la solicitud: ${error.message || 'Error desconocido'}`, 
-        variant: 'destructive' 
-      });
+      toast.error(`No se pudo actualizar la solicitud: ${error.message || 'Error desconocido'}`);
     }
   };
 
@@ -830,12 +1281,12 @@ const ShelterDashboard: React.FC = () => {
         throw dbError;
       }
 
-      toast({ title: 'Imagen subida', description: 'La imagen se ha subido correctamente' });
+      toast.success('La imagen se ha subido correctamente');
       // Refresh the images list without leaving current tab
       queryClient.invalidateQueries({ queryKey: ['shelter-images', user.id] });
     } catch (error) {
       console.error('Error uploading image:', error);
-      toast({ title: 'Error al subir imagen', description: `${error.message}`, variant: 'destructive' });
+      toast.error(`Error al subir imagen: ${error.message}`);
     } finally {
       setUploadingImage(false);
     }
@@ -895,13 +1346,13 @@ const ShelterDashboard: React.FC = () => {
       });
 
       console.log('Updated newPet state with image URL:', publicUrl);
-      toast({ title: 'Imagen de mascota subida', description: 'La imagen se ha subido correctamente' });
+      toast.success('La imagen se ha subido correctamente');
       console.log('=== PET IMAGE UPLOAD SUCCESS ===');
     } catch (error) {
       console.error('=== PET IMAGE UPLOAD ERROR ===');
       console.error('Error uploading pet image:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
-      toast({ title: 'Error al subir imagen de mascota', description: `${error.message}`, variant: 'destructive' });
+      toast.error(`Error al subir imagen de mascota: ${error.message}`);
     } finally {
       setUploadingImage(false);
       console.log('=== PET IMAGE UPLOAD END ===');
@@ -958,12 +1409,12 @@ const ShelterDashboard: React.FC = () => {
         throw dbError;
       }
 
-      toast({ title: 'Video subido', description: 'El video se ha subido correctamente' });
+      toast.success('El video se ha subido correctamente');
       // Refresh the videos list without leaving current tab
       queryClient.invalidateQueries({ queryKey: ['shelter-videos', user.id] });
     } catch (error) {
       console.error('Error uploading video:', error);
-      toast({ title: 'Error al subir video', description: 'No se pudo subir el video', variant: 'destructive' });
+      toast.error('No se pudo subir el video');
     } finally {
       setUploadingVideo(false);
     }
@@ -981,9 +1432,9 @@ const ShelterDashboard: React.FC = () => {
   // Show loading state only for critical data
   if (isCriticalLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 p-6">
         <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">🐾</span>
           </div>
           <h2 className="text-xl font-semibold text-gray-700">Cargando datos del albergue...</h2>
@@ -1000,12 +1451,12 @@ const ShelterDashboard: React.FC = () => {
     
     if (noShelterError && !showShelterForm) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 p-6">
           <div className="text-center">
             <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl text-white">🏠</span>
             </div>
-            <h2 className="text-xl font-semibold text-blue-700">¡Bienvenido a Druma!</h2>
+            <h2 className="text-xl font-semibold text-blue-700">¡Bienvenido a PetHub!</h2>
             <p className="text-gray-600 mt-2">Parece que aún no tienes un albergue registrado.</p>
             <p className="text-gray-600 mt-1">Crea tu albergue para comenzar a gestionar mascotas y adopciones.</p>
             
@@ -1023,7 +1474,7 @@ const ShelterDashboard: React.FC = () => {
 
     if (noShelterError && showShelterForm) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 p-6">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
               <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1105,7 +1556,7 @@ const ShelterDashboard: React.FC = () => {
 
     // Show other errors
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 p-6">
         <div className="text-center">
           <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl text-white">⚠️</span>
@@ -1176,93 +1627,23 @@ const ShelterDashboard: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard del Albergue</h1>
-            <p className="text-gray-600">Gestiona tu albergue y mascotas</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 p-3 md:p-6">
+      {/* Header - Modern Design */}
+      <div className="mb-6 md:mb-8 relative z-10">
+        <div className="bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl p-4 md:p-6 text-white shadow-lg relative">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 md:w-6 md:h-6" />
           </div>
-          <div className="flex items-center gap-4">
-            <Badge variant="secondary" className="text-sm">
-              <Building2 className="w-4 h-4 mr-2" />
-              {currentShelter.name}
-            </Badge>
-            <SettingsDropdown variant="default" />
-            
-            {/* Database Connection Status */}
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${hasErrors ? 'bg-red-500' : 'bg-green-500'}`}></div>
-              <span className="text-xs text-gray-600">
-                {hasErrors ? 'Error de conexión' : 'Base de datos conectada'}
-              </span>
-              {hasErrors && (
-                <div className="ml-2 text-xs text-red-600">
-                  (Verificar esquema de BD)
+              <h1 className="text-lg md:text-xl font-bold truncate">Dashboard Albergue</h1>
                 </div>
-              )}
-              {hasErrors && (
-                <button 
-                  onClick={async () => {
-                    try {
-                      // Test basic database connection and table structure
-                      console.log('🔍 Testing database connection...');
-                      
-                      // Test 1: Basic connection to shelters table
-                      const { data: shelterTest, error: shelterError } = await supabase
-                        .from('shelters')
-                        .select('*')
-                        .limit(1);
-                      
-                      if (shelterError) {
-                        toast({ title: 'Error de conexión', description: `Error accessing shelters table: ${shelterError.message}`, variant: 'destructive' });
-                        return;
-                      }
-                      
-                      // Test 2: Check if user can access their own data
-                      const { data: userShelter, error: userError } = await supabase
-                        .from('shelters')
-                        .select('*')
-                        .eq('owner_id', user?.id)
-                        .limit(1);
-                      
-                      let diagnosticMessage = '✅ Conexión exitosa a la base de datos!\n\n';
-                      diagnosticMessage += `📊 Tabla shelters: ${shelterTest?.length || 0} registros\n`;
-                      diagnosticMessage += `👤 Tu shelter: ${userShelter?.length || 0} registros\n`;
-                      
-                      if (userError) {
-                        diagnosticMessage += `⚠️ Error al acceder a tu shelter: ${userError.message}\n`;
-                      }
-                      
-                      if (userShelter?.length === 0) {
-                        diagnosticMessage += `\n💡 No tienes un shelter registrado. Necesitas crear uno primero.`;
-                        diagnosticMessage += `\n\n🔧 Solución: Haz clic en "Crear Mi Albergue" para comenzar.`;
-                      } else {
-                        diagnosticMessage += `\n✅ Tienes un shelter registrado: ${userShelter[0].name}`;
-                      }
-                      
-                      toast({ title: 'Diagnóstico', description: diagnosticMessage });
-                      
-                    } catch (err) {
-                      toast({ title: 'Error de conexión', description: String(err), variant: 'destructive' });
-                    }
-                  }}
-                  className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                >
-                  Probar Conexión
-                </button>
-              )}
+            <div className="flex items-center shrink-0 relative z-50">
+              <SettingsDropdown variant="gradient" />
             </div>
-            
-            <Button 
-              onClick={handleLogout} 
-              variant="outline" 
-              className="text-red-600 border-red-300 hover:bg-red-50"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Cerrar Sesión
-            </Button>
+          </div>
+          <div className="pl-0 md:pl-[52px]">
+            <p className="text-sm md:text-base text-blue-100 truncate">{currentShelter.name}</p>
           </div>
         </div>
 
@@ -1270,7 +1651,7 @@ const ShelterDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600">{displayPets.length}</div>
+              <div className="text-2xl font-bold text-blue-600">{displayPets.length}</div>
               <div className="text-sm text-gray-600">Mascotas</div>
             </CardContent>
           </Card>
@@ -1302,120 +1683,361 @@ const ShelterDashboard: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-white p-1 shadow-sm">
-          <TabsTrigger 
-            value="profile" 
-            className="data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700"
-          >
-            Perfil
-          </TabsTrigger>
-          <TabsTrigger 
-            value="pets" 
-            className="data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700"
-          >
-            Mascotas
-          </TabsTrigger>
-          <TabsTrigger 
-            value="quotes" 
-            className="data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700"
-          >
-            Solicitudes
-          </TabsTrigger>
-           <TabsTrigger 
-             value="media" 
-             className="data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700"
-           >
-             Imágenes & Videos
-           </TabsTrigger>
-        </TabsList>
+      <div className="pb-24 md:pb-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4 md:space-y-6">
+          {/* Tabs content without TabsList - we'll use bottom navigation instead */}
 
-        {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-6">
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard" className="space-y-4 md:space-y-6">
+          {/* Dashboard Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border-l-4 border-l-blue-500">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Mascotas</p>
+                    <p className="text-2xl font-bold text-blue-600">{displayPets.length}</p>
+                  </div>
+                  <div className="p-3 bg-blue-100 rounded-full">
+                    <PawPrint className="w-6 h-6 text-blue-600" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {displayPets.filter(p => p.species === 'Dog').length} perros • {displayPets.filter(p => p.species === 'Cat').length} gatos
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-green-500">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Solicitudes Pendientes</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {displayQuotes.filter(q => q.status === 'pending').length}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-full">
+                    <Clock className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Requieren atención
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Adopciones Aprobadas</p>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {displayQuotes.filter(q => q.status === 'approved').length}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-emerald-100 rounded-full">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Total aprobadas
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-orange-500">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Voluntarios</p>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {currentShelter?.total_volunteers || 0}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-orange-100 rounded-full">
+                    <Users className="w-6 h-6 text-orange-600" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Miembros activos
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            {/* Adoption Applications Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Solicitudes de Adopción (Últimos 7 días)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={(() => {
+                    const last7Days = Array.from({ length: 7 }, (_, i) => {
+                      const date = subDays(new Date(), 6 - i);
+                      const dateStr = format(date, 'yyyy-MM-dd');
+                      const dayStart = startOfDay(date);
+                      const dayEnd = endOfDay(date);
+                      
+                      const dayQuotes = displayQuotes.filter(q => {
+                        const quoteDate = parseISO(q.created_at);
+                        return quoteDate >= dayStart && quoteDate <= dayEnd;
+                      });
+                      
+                      return {
+                        date: format(date, 'dd/MM', { locale: es }),
+                        Pendientes: dayQuotes.filter(q => q.status === 'pending').length,
+                        Aprobadas: dayQuotes.filter(q => q.status === 'approved').length,
+                        Rechazadas: dayQuotes.filter(q => q.status === 'rejected').length
+                      };
+                    });
+                    return last7Days;
+                  })()}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Pendientes" fill="#10b981" />
+                    <Bar dataKey="Aprobadas" fill="#3b82f6" />
+                    <Bar dataKey="Rechazadas" fill="#ef4444" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Pets by Species Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PawPrint className="w-5 h-5" />
+                  Mascotas por Especie
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={(() => {
+                    const speciesCount = displayPets.reduce((acc, pet) => {
+                      const species = pet.species || 'Otro';
+                      acc[species] = (acc[species] || 0) + 1;
+                      return acc;
+                    }, {} as Record<string, number>);
+                    
+                    return Object.entries(speciesCount).map(([species, count]) => ({
+                      especie: species === 'Dog' ? 'Perro' : species === 'Cat' ? 'Gato' : species,
+                      cantidad: count
+                    }));
+                  })()}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="especie" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="cantidad" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            {/* Recent Applications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  Solicitudes Recientes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {displayQuotes.slice(0, 5).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                    <p>No hay solicitudes recientes</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {displayQuotes.slice(0, 5).map((quote) => (
+                      <div key={quote.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {quote.pet_name || 'Mascota'}
+                          </p>
+                          <p className="text-sm text-gray-600 truncate">
+                            {quote.applicant_name || 'Solicitante'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {format(parseISO(quote.created_at), "dd 'de' MMM, yyyy", { locale: es })}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant={
+                            quote.status === 'approved' ? 'default' : 
+                            quote.status === 'rejected' ? 'destructive' : 
+                            'secondary'
+                          }
+                          className="ml-2 shrink-0"
+                        >
+                          {quote.status === 'pending' ? 'Pendiente' : 
+                           quote.status === 'approved' ? 'Aprobada' : 
+                           'Rechazada'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Pets Summary */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
+                  <PawPrint className="w-5 h-5" />
+                  Resumen de Mascotas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <PawPrint className="w-5 h-5 text-blue-600" />
+                      <span className="font-medium text-gray-700">Total Mascotas</span>
+                    </div>
+                    <span className="text-2xl font-bold text-blue-600">{displayPets.length}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Perros</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {displayPets.filter(p => p.species === 'Dog').length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Gatos</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {displayPets.filter(p => p.species === 'Cat').length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Otros</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {displayPets.filter(p => p.species && p.species !== 'Dog' && p.species !== 'Cat').length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Con Imagen</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        {displayPets.filter(p => p.image_url).length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Profile Tab */}
+        <TabsContent value="profile" className="space-y-4 md:space-y-6">
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                <Building2 className="w-4 h-4 md:w-5 md:h-5" />
                 Información del Albergue
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <CardContent className="space-y-4 md:space-y-6 p-4 md:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="shelter-name">Nombre del Albergue</Label>
+                    <Label htmlFor="shelter-name" className="text-sm md:text-base">Nombre del Albergue</Label>
                     <Input 
                       id="shelter-name" 
                       value={shelterForm.name} 
                       onChange={(e) => setShelterForm({...shelterForm, name: e.target.value})}
-                      className="bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                      className="bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 w-full"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="shelter-location">Ubicación</Label>
+                    <Label htmlFor="shelter-location" className="text-sm md:text-base">Ubicación</Label>
                     <Input 
                       id="shelter-location" 
                       value={shelterForm.location} 
                       onChange={(e) => setShelterForm({...shelterForm, location: e.target.value})}
-                      className="bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                      className="bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 w-full"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="shelter-phone">Teléfono</Label>
+                    <Label htmlFor="shelter-phone" className="text-sm md:text-base">Teléfono</Label>
                     <Input 
                       id="shelter-phone" 
                       value={shelterForm.phone} 
                       onChange={(e) => setShelterForm({...shelterForm, phone: e.target.value})}
-                      className="bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                      className="bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 w-full"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="shelter-email">Email</Label>
+                    <Label htmlFor="shelter-email" className="text-sm md:text-base">Email</Label>
                     <Input 
                       id="shelter-email" 
                       value={shelterForm.email} 
                       onChange={(e) => setShelterForm({...shelterForm, email: e.target.value})}
-                      className="bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                      className="bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 w-full"
                     />
                   </div>
                 </div>
                 <div className="space-y-4">
                                      <div>
-                     <Label htmlFor="shelter-mission">Declaración de Misión</Label>
+                    <Label htmlFor="shelter-mission" className="text-sm md:text-base">Declaración de Misión</Label>
                      <Textarea 
                        id="shelter-mission" 
                       value={shelterForm.mission_statement} 
                       onChange={(e) => setShelterForm({...shelterForm, mission_statement: e.target.value})}
                        placeholder="Describe la misión de tu albergue..."
                        rows={4}
+                      className="w-full resize-none"
                      />
                    </div>
-                   <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div>
-                       <Label htmlFor="shelter-years">Años de Experiencia</Label>
+                      <Label htmlFor="shelter-years" className="text-sm md:text-base">Años de Experiencia</Label>
                        <Input 
                          id="shelter-years" 
                          type="number" 
                         value={shelterForm.years_experience} 
                         onChange={(e) => setShelterForm({...shelterForm, years_experience: parseInt(e.target.value) || 0})}
                          min="0"
+                        className="w-full"
                        />
                      </div>
                      <div>
-                       <Label htmlFor="shelter-volunteers">Total de Voluntarios</Label>
+                      <Label htmlFor="shelter-volunteers" className="text-sm md:text-base">Total de Voluntarios</Label>
                        <Input 
                          id="shelter-volunteers" 
                          type="number" 
                         value={shelterForm.total_volunteers} 
                         onChange={(e) => setShelterForm({...shelterForm, total_volunteers: parseInt(e.target.value) || 0})}
                          min="0"
+                        className="w-full"
                        />
                      </div>
                    </div>
                 </div>
               </div>
-              <div className="flex justify-end">
-                <Button onClick={handleSaveProfile} className="bg-purple-600 hover:bg-purple-700">
+              <div className="flex justify-end pt-2">
+                <Button 
+                  onClick={handleSaveProfile} 
+                  className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+                  size="sm"
+                >
                   <Save className="w-4 h-4 mr-2" />
                   Guardar Cambios
                 </Button>
@@ -1431,11 +2053,6 @@ const ShelterDashboard: React.FC = () => {
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-semibold">Mascotas del Albergue</h3>
-                {isUsingMockData && (
-                  <p className="text-sm text-amber-600 mt-1">
-                    📋 Mostrando datos de ejemplo. Agrega mascotas reales para gestionarlas.
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-3">
                 {/* View Mode Toggle */}
@@ -1462,7 +2079,7 @@ const ShelterDashboard: React.FC = () => {
                      setShowAddPetForm(true);
                      setActiveTab('add-pet');
                    }} 
-                   className="bg-green-600 hover:bg-green-700"
+                   className="bg-blue-600 hover:bg-blue-700"
                    style={{ 
                      zIndex: 9999, 
                      position: 'relative',
@@ -1640,7 +2257,7 @@ const ShelterDashboard: React.FC = () => {
           {petsLoading ? (
             <Card>
               <CardContent className="text-center py-8">
-                <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🐾</span>
                 </div>
                 <h3 className="text-lg font-semibold text-gray-700 mb-2">Cargando mascotas...</h3>
@@ -1674,7 +2291,7 @@ const ShelterDashboard: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredPets.map((pet) => (
               <Card key={pet.id} className="overflow-hidden">
-                <div className="h-48 bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center relative">
+                <div className="h-48 bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center relative">
                   {pet.image_url ? (
                     <img 
                       src={pet.image_url} 
@@ -1682,7 +2299,7 @@ const ShelterDashboard: React.FC = () => {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <PawPrint className="w-20 h-20 text-purple-400" />
+                    <PawPrint className="w-20 h-20 text-blue-400" />
                   )}
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
@@ -1743,7 +2360,7 @@ const ShelterDashboard: React.FC = () => {
                       <Badge variant="outline" className="text-xs text-blue-600">🐕</Badge>
                     )}
                     {pet.good_with_cats && (
-                      <Badge variant="outline" className="text-xs text-purple-600">🐱</Badge>
+                      <Badge variant="outline" className="text-xs text-blue-600">🐱</Badge>
                     )}
                                      </div>
                  </CardContent>
@@ -1759,7 +2376,7 @@ const ShelterDashboard: React.FC = () => {
                      <Card key={pet.id} className="p-4">
                        <div className="flex items-center justify-between">
                          <div className="flex items-center space-x-4">
-                           <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">
+                           <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-lg flex items-center justify-center">
                              {pet.image_url ? (
                                <img 
                                  src={pet.image_url} 
@@ -1767,7 +2384,7 @@ const ShelterDashboard: React.FC = () => {
                                  className="w-full h-full object-cover rounded-lg"
                                />
                              ) : (
-                               <PawPrint className="w-8 h-8 text-purple-400" />
+                               <PawPrint className="w-8 h-8 text-blue-400" />
                              )}
                            </div>
                            <div>
@@ -1793,7 +2410,7 @@ const ShelterDashboard: React.FC = () => {
                                <Badge variant="outline" className="text-xs text-blue-600">🐕</Badge>
                              )}
                              {pet.good_with_cats && (
-                               <Badge variant="outline" className="text-xs text-purple-600">🐱</Badge>
+                               <Badge variant="outline" className="text-xs text-blue-600">🐱</Badge>
                              )}
                            </div>
                            <Button
@@ -1950,12 +2567,24 @@ const ShelterDashboard: React.FC = () => {
                       </p>
                     )}
                     
-                    {quote.status === 'pending' && (
                       <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedApplication(quote);
+                          setShowChatModal(true);
+                        }}
+                      >
+                        <MessageCircle className="w-4 h-4 mr-1" />
+                        Chat
+                      </Button>
+                      {quote.status === 'pending' && (
+                        <>
                                                  <Button 
                            size="sm" 
                            onClick={() => handleQuoteAction(quote.id, 'approved')}
-                           className="bg-green-600 hover:bg-green-700"
+                            className="bg-blue-600 hover:bg-blue-700"
                          >
                            Aprobar
                          </Button>
@@ -1966,8 +2595,9 @@ const ShelterDashboard: React.FC = () => {
                          >
                            Rechazar
                          </Button>
-                      </div>
+                        </>
                     )}
+                    </div>
                   </div>
                 ))}
                   </div>
@@ -2001,12 +2631,24 @@ const ShelterDashboard: React.FC = () => {
                             )}
                           </div>
                           <div className="ml-4">
+                            <div className="flex gap-2 flex-col">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedApplication(quote);
+                                  setShowChatModal(true);
+                                }}
+                              >
+                                <MessageCircle className="w-4 h-4 mr-1" />
+                                Chat
+                              </Button>
                             {quote.status === 'pending' && (
-                              <div className="flex gap-2">
+                                <>
                                 <Button 
                                   size="sm" 
                                   onClick={() => handleQuoteAction(quote.id, 'approved')}
-                                  className="bg-green-600 hover:bg-green-700"
+                                    className="bg-blue-600 hover:bg-blue-700"
                                 >
                                   Aprobar
                                 </Button>
@@ -2017,8 +2659,9 @@ const ShelterDashboard: React.FC = () => {
                                 >
                                   Rechazar
                                 </Button>
-                              </div>
+                                </>
                             )}
+                            </div>
                           </div>
                         </div>
                       </Card>
@@ -2044,7 +2687,7 @@ const ShelterDashboard: React.FC = () => {
                     setShowAddPetForm(true);
                     setActiveTab('add-pet');
                   }} 
-                  className="bg-purple-600 hover:bg-purple-700"
+                  className="bg-blue-600 hover:bg-blue-700"
                   style={{ 
                     zIndex: 9999, 
                     position: 'relative',
@@ -2098,12 +2741,28 @@ const ShelterDashboard: React.FC = () => {
                      </div>
                      <div>
                        <Label htmlFor="pet-breed">Raza</Label>
+                       {newPet.species === 'Dog' ? (
+                         <select
+                           id="pet-breed"
+                           value={newPet.breed}
+                           onChange={(e) => setNewPet({...newPet, breed: e.target.value})}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                         >
+                           <option value="">Selecciona una raza</option>
+                           {dogBreeds.map((breed) => (
+                             <option key={breed} value={breed}>
+                               {breed}
+                             </option>
+                           ))}
+                         </select>
+                       ) : (
                        <Input 
                          id="pet-breed" 
                          value={newPet.breed} 
                          onChange={(e) => setNewPet({...newPet, breed: e.target.value})}
                          placeholder="Raza de la mascota"
                        />
+                       )}
                      </div>
                      <div>
                        <Label htmlFor="pet-age">Edad (años)</Label>
@@ -2314,11 +2973,7 @@ const ShelterDashboard: React.FC = () => {
                                
                                if (error) {
                                  console.error('Upload error:', error);
-                                 toast({ 
-                                   title: 'Error de carga', 
-                                   description: `Error al subir la imagen: ${error.message}`, 
-                                   variant: 'destructive' 
-                                 });
+                                 toast.error(`Error al subir la imagen: ${error.message}`);
                                  return;
                                }
                                
@@ -2334,27 +2989,20 @@ const ShelterDashboard: React.FC = () => {
                                // Update state
                                setNewPet(prev => ({ ...prev, image_url: publicUrl }));
                                
-                               toast({ 
-                                 title: 'Imagen subida exitosamente', 
-                                 description: 'La imagen de la mascota se ha guardado correctamente' 
-                               });
+                               toast.success('La imagen de la mascota se ha guardado correctamente');
                                console.log('=== PET IMAGE UPLOAD SUCCESS ===');
                                
                              } catch (error) {
                                console.error('Error:', error);
-                               toast({ 
-                                 title: 'Error al subir imagen', 
-                                 description: `No se pudo subir la imagen: ${error.message}`, 
-                                 variant: 'destructive' 
-                               });
+                               toast.error(`No se pudo subir la imagen: ${error.message}`);
                              } finally {
                                setUploadingImage(false);
                              }
                            }}
-                           className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-purple-400"
+                           className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-blue-400"
                          />
                          {uploadingImage && (
-                           <p className="text-sm text-purple-600 mt-2 text-center">Uploading image...</p>
+                           <p className="text-sm text-blue-600 mt-2 text-center">Uploading image...</p>
                          )}
                          {newPet.image_url && (
                            <div className="mt-2">
@@ -2383,6 +3031,7 @@ const ShelterDashboard: React.FC = () => {
                         color: '',
                         weight: '',
                         description: '',
+                        image_url: '',
                         good_with_kids: false,
                         good_with_dogs: false,
                         good_with_cats: false,
@@ -2401,7 +3050,7 @@ const ShelterDashboard: React.FC = () => {
                   </Button>
                   <Button 
                     onClick={editingPet ? handleUpdatePet : handleAddPet}
-                    className="bg-purple-600 hover:bg-purple-700"
+                    className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Save className="w-4 h-4 mr-2" />
                     {editingPet ? 'Actualizar Mascota' : 'Agregar Mascota'}
@@ -2444,7 +3093,7 @@ const ShelterDashboard: React.FC = () => {
                          disabled={uploadingImage}
                        />
                        <Button 
-                         className="bg-purple-600 hover:bg-purple-700"
+                         className="bg-blue-600 hover:bg-blue-700"
                          onClick={() => document.getElementById('image-upload')?.click()}
                          disabled={uploadingImage}
                        >
@@ -2475,9 +3124,9 @@ const ShelterDashboard: React.FC = () => {
                                  .delete()
                                  .eq('id', image.id);
                                if (error) {
-                                 toast({ title: 'Error al eliminar', description: error.message, variant: 'destructive' });
+                                 toast.error(`Error al eliminar: ${error.message}`);
                                } else {
-                                 toast({ title: 'Imagen eliminada', description: 'Se eliminó correctamente' });
+                                 toast.success('Imagen eliminada correctamente');
                                  queryClient.invalidateQueries({ queryKey: ['shelter-images', user.id] });
                                }
                              }}>
@@ -2513,7 +3162,7 @@ const ShelterDashboard: React.FC = () => {
                          disabled={uploadingVideo}
                        />
                        <button 
-                         className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md flex items-center gap-2 mx-auto"
+                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 mx-auto"
                          onClick={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
@@ -2536,8 +3185,8 @@ const ShelterDashboard: React.FC = () => {
                      {shelterVideos.map((video) => (
                        <div key={video.id} className="relative group">
                          <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100">
-                             <Play className="w-12 h-12 text-purple-600" />
+                           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-cyan-100">
+                             <Play className="w-12 h-12 text-blue-600" />
                            </div>
                          </div>
                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -2551,9 +3200,9 @@ const ShelterDashboard: React.FC = () => {
                                  .delete()
                                  .eq('id', video.id);
                                if (error) {
-                                 toast({ title: 'Error al eliminar', description: error.message, variant: 'destructive' });
+                                 toast.error(`Error al eliminar: ${error.message}`);
                                } else {
-                                 toast({ title: 'Video eliminado', description: 'Se eliminó correctamente' });
+                                 toast.success('Video eliminado correctamente');
                                  queryClient.invalidateQueries({ queryKey: ['shelter-videos', user.id] });
                                }
                              }}>
@@ -2590,7 +3239,7 @@ const ShelterDashboard: React.FC = () => {
                            disabled={uploadingImage}
                          />
                          <Button 
-                           className="bg-purple-600 hover:bg-purple-700"
+                           className="bg-blue-600 hover:bg-blue-700"
                            onClick={() => document.getElementById('image-upload')?.click()}
                            disabled={uploadingImage}
                          >
@@ -2617,7 +3266,7 @@ const ShelterDashboard: React.FC = () => {
                            disabled={uploadingVideo}
                          />
                          <button 
-                           className="mt-4 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md flex items-center gap-2 mx-auto"
+                           className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 mx-auto"
                            onClick={(e) => {
                              e.preventDefault();
                              e.stopPropagation();
@@ -2642,6 +3291,7 @@ const ShelterDashboard: React.FC = () => {
            </Card>
          </TabsContent>
        </Tabs>
+      </div>
 
       <Dialog open={!!previewImageUrl} onOpenChange={() => setPreviewImageUrl(null)}>
         <DialogContent className="max-w-3xl">
@@ -2664,8 +3314,212 @@ const ShelterDashboard: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Adoption Chat Modal */}
+      <Dialog open={showChatModal} onOpenChange={setShowChatModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-blue-500" />
+              Chat con el Cliente
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedApplication && (
+            <div className="flex-1 flex flex-col">
+              {/* Application Info */}
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <span className="text-gray-500 text-xl">🐾</span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-800">
+                      {selectedApplication.pet_name || 'Mascota'}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      Solicitud de adopción • {new Date(selectedApplication.created_at).toLocaleDateString('es-ES')}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Cliente: {selectedApplication.applicant_name || 'Usuario'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat Messages Area */}
+              <div className="flex-1 bg-gray-50 rounded-lg p-4 mb-4 overflow-y-auto min-h-[300px] max-h-[400px]">
+                {loadingChat ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                    <MessageCircle className="w-12 h-12 mb-2 opacity-50" />
+                    <p className="text-sm">No hay mensajes aún</p>
+                    <p className="text-xs mt-1">Comienza la conversación</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {chatMessages.map((message) => {
+                      const isOwnMessage = message.sender_id === user?.id;
+                      const isSystemMessage = message.message_type === 'system';
+                      
+                      return (
+                        <div
+                          key={message.id}
+                          className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`rounded-lg p-3 max-w-[70%] shadow-sm ${
+                              isSystemMessage
+                                ? 'bg-yellow-50 border border-yellow-200 mx-auto'
+                                : isOwnMessage
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-white text-gray-700'
+                            }`}
+                          >
+                            <p className={`text-sm ${isOwnMessage ? 'text-white' : 'text-gray-700'}`}>
+                              {message.message}
+                            </p>
+                            <p className={`text-xs mt-1 ${
+                              isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+                            }`}>
+                              {isSystemMessage 
+                                ? 'Sistema' 
+                                : isOwnMessage 
+                                ? 'Tú' 
+                                : selectedApplication.applicant_id === message.sender_id 
+                                ? 'Cliente' 
+                                : 'Albergue'} • {formatTime(message.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
+
+              {/* Message Input */}
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Escribe tu mensaje..." 
+                  className="flex-1"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  disabled={sending || loadingChat || !chatRoom}
+                />
+                <Button 
+                  type="button" 
+                  className="bg-blue-500 hover:bg-blue-600"
+                  onClick={sendMessage}
+                  disabled={sending || loadingChat || !chatRoom || !newMessage.trim()}
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bottom Navigation Menu - Similar to client menu */}
+      <div 
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-2xl"
+        style={{ height: '80px', boxSizing: 'border-box' }}
+      >
+        <div className="flex justify-around items-center h-full py-2 px-1">
+          {/* Dashboard */}
+          <button
+            onClick={() => handleTabChange('dashboard')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'dashboard'
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <BarChart3 size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Dashboard</span>
+          </button>
+
+          {/* Perfil */}
+          <button
+            onClick={() => handleTabChange('profile')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'profile'
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <Building2 size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Perfil</span>
+          </button>
+
+          {/* Mascotas */}
+          <button
+            onClick={() => handleTabChange('pets')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'pets'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <PawPrint size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Mascotas</span>
+          </button>
+
+          {/* Solicitudes */}
+          <button
+            onClick={() => handleTabChange('quotes')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'quotes'
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <MessageSquare size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Solicitudes</span>
+          </button>
+
+          {/* Media */}
+          <button
+            onClick={() => handleTabChange('media')}
+            className={`
+              w-full flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 min-w-0 flex-1
+              ${activeTab === 'media'
+                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg transform scale-105' 
+                : 'text-gray-500 hover:text-gray-700'
+              }
+            `}
+          >
+            <Image size={18} className="mb-1" />
+            <span className="text-xs font-medium truncate leading-tight">Media</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
 export default ShelterDashboard;
+

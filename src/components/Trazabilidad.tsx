@@ -831,17 +831,17 @@ const Trazabilidad: React.FC = () => {
                     const exerciseLabel = getExerciseTypeLabel(session.exercise_type);
                     return (
                       <div key={session.id} className="border-l-4 border-orange-500 pl-4 py-4 bg-orange-50 rounded-r-lg">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <IconComponent className="w-5 h-5 text-orange-600" />
+                          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <IconComponent className="w-5 h-5 text-orange-600 flex-shrink-0" />
                                 <span className="font-semibold text-gray-800">
                                   {exerciseLabel}
                                 </span>
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs flex-shrink-0">
                                   {session.pet_name}
                                 </Badge>
-                                <Badge className={intensityLevels.find(i => i.value === session.intensity)?.color || 'bg-gray-100 text-gray-800'}>
+                                <Badge className={`${intensityLevels.find(i => i.value === session.intensity)?.color || 'bg-gray-100 text-gray-800'} flex-shrink-0`}>
                                   {intensityLevels.find(i => i.value === session.intensity)?.label || session.intensity}
                                 </Badge>
                               </div>
@@ -855,7 +855,7 @@ const Trazabilidad: React.FC = () => {
                                 })}
                               </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-shrink-0">
                               <Button
                                 variant="outline"
                                 size="sm"

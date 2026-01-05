@@ -51,6 +51,202 @@ const PetCreation: React.FC = () => {
     }
   };
 
+  // Lista completa de razas de perros
+  const dogBreeds = [
+    'Mestizo',
+    'Afgano',
+    'Airedale Terrier',
+    'Akita',
+    'Akita Americano',
+    'Alaskan Malamute',
+    'American Bulldog',
+    'American Pit Bull Terrier',
+    'American Staffordshire Terrier',
+    'American Water Spaniel',
+    'Australian Cattle Dog',
+    'Australian Kelpie',
+    'Australian Shepherd',
+    'Australian Terrier',
+    'Azawakh',
+    'Basenji',
+    'Basset Hound',
+    'Beagle',
+    'Bearded Collie',
+    'Bedlington Terrier',
+    'Belgian Malinois',
+    'Belgian Shepherd',
+    'Belgian Tervuren',
+    'Bergamasco',
+    'Bernese Mountain Dog',
+    'Bichon Frisé',
+    'Bichon Maltés',
+    'Black and Tan Coonhound',
+    'Bloodhound',
+    'Border Collie',
+    'Border Terrier',
+    'Borzoi',
+    'Boston Terrier',
+    'Bouvier des Flandres',
+    'Boxer',
+    'Boykin Spaniel',
+    'Bracco Italiano',
+    'Briard',
+    'Brittany',
+    'Brussels Griffon',
+    'Bull Terrier',
+    'Bulldog',
+    'Bulldog Francés',
+    'Bullmastiff',
+    'Cairn Terrier',
+    'Cane Corso',
+    'Cardigan Welsh Corgi',
+    'Cavalier King Charles Spaniel',
+    'Chesapeake Bay Retriever',
+    'Chihuahua',
+    'Chinese Crested',
+    'Chin',
+    'Chow Chow',
+    'Clumber Spaniel',
+    'Cocker Spaniel',
+    'Cocker Spaniel Americano',
+    'Collie',
+    'Coonhound',
+    'Curly-Coated Retriever',
+    'Dachshund',
+    'Dalmatian',
+    'Dandie Dinmont Terrier',
+    'Doberman Pinscher',
+    'Dogo Argentino',
+    'Dogo de Burdeos',
+    'English Cocker Spaniel',
+    'English Foxhound',
+    'English Setter',
+    'English Springer Spaniel',
+    'English Toy Spaniel',
+    'Field Spaniel',
+    'Finnish Spitz',
+    'Flat-Coated Retriever',
+    'Fox Terrier',
+    'Foxhound',
+    'French Bulldog',
+    'German Pinscher',
+    'German Shepherd',
+    'German Shorthaired Pointer',
+    'German Wirehaired Pointer',
+    'Giant Schnauzer',
+    'Glen of Imaal Terrier',
+    'Golden Retriever',
+    'Gordon Setter',
+    'Great Dane',
+    'Great Pyrenees',
+    'Greater Swiss Mountain Dog',
+    'Greyhound',
+    'Harrier',
+    'Havanese',
+    'Ibizan Hound',
+    'Irish Red and White Setter',
+    'Irish Setter',
+    'Irish Terrier',
+    'Irish Water Spaniel',
+    'Irish Wolfhound',
+    'Italian Greyhound',
+    'Jack Russell Terrier',
+    'Japanese Chin',
+    'Keeshond',
+    'Kerry Blue Terrier',
+    'Komondor',
+    'Kuvasz',
+    'Labrador Retriever',
+    'Lagotto Romagnolo',
+    'Lakeland Terrier',
+    'Leonberger',
+    'Lhasa Apso',
+    'Lowchen',
+    'Maltese',
+    'Manchester Terrier',
+    'Mastiff',
+    'Miniature Bull Terrier',
+    'Miniature Pinscher',
+    'Miniature Schnauzer',
+    'Neapolitan Mastiff',
+    'Newfoundland',
+    'Norfolk Terrier',
+    'Norwegian Buhund',
+    'Norwegian Elkhound',
+    'Norwich Terrier',
+    'Nova Scotia Duck Tolling Retriever',
+    'Old English Sheepdog',
+    'Otterhound',
+    'Papillon',
+    'Parson Russell Terrier',
+    'Pekingese',
+    'Pembroke Welsh Corgi',
+    'Petit Basset Griffon Vendéen',
+    'Pharaoh Hound',
+    'Plott',
+    'Pointer',
+    'Polish Lowland Sheepdog',
+    'Pomeranian',
+    'Poodle',
+    'Poodle Estándar',
+    'Poodle Miniatura',
+    'Poodle Toy',
+    'Portuguese Water Dog',
+    'Pug',
+    'Puli',
+    'Pumi',
+    'Rat Terrier',
+    'Redbone Coonhound',
+    'Rhodesian Ridgeback',
+    'Rottweiler',
+    'Saint Bernard',
+    'Saluki',
+    'Samoyed',
+    'Schipperke',
+    'Schnauzer',
+    'Schnauzer Estándar',
+    'Scottish Deerhound',
+    'Scottish Terrier',
+    'Sealyham Terrier',
+    'Shar Pei',
+    'Shetland Sheepdog',
+    'Shiba Inu',
+    'Shih Tzu',
+    'Siberian Husky',
+    'Silky Terrier',
+    'Skye Terrier',
+    'Smooth Fox Terrier',
+    'Soft Coated Wheaten Terrier',
+    'Spinone Italiano',
+    'Staffordshire Bull Terrier',
+    'Standard Schnauzer',
+    'Sussex Spaniel',
+    'Swedish Vallhund',
+    'Tibetan Mastiff',
+    'Tibetan Spaniel',
+    'Tibetan Terrier',
+    'Toy Fox Terrier',
+    'Treeing Walker Coonhound',
+    'Vizsla',
+    'Weimaraner',
+    'Welsh Springer Spaniel',
+    'Welsh Terrier',
+    'West Highland White Terrier',
+    'Whippet',
+    'Wire Fox Terrier',
+    'Wirehaired Pointing Griffon',
+    'Xoloitzcuintli',
+    'Yorkshire Terrier',
+    'Otra'
+  ].sort((a, b) => {
+    // Mantener "Mestizo" y "Otra" al final
+    if (a === 'Mestizo') return -1;
+    if (b === 'Mestizo') return 1;
+    if (a === 'Otra') return 1;
+    if (b === 'Otra') return -1;
+    return a.localeCompare(b);
+  });
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploading(true);
@@ -202,7 +398,7 @@ const PetCreation: React.FC = () => {
             <PawPrint className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            ¡Bienvenido a Druma! 🎉
+            ¡Bienvenido a PetHub! 🎉
           </h1>
           <p className="text-lg text-gray-600">
             Vamos a crear tu primer compañero digital
@@ -247,7 +443,7 @@ const PetCreation: React.FC = () => {
               <div className="text-center space-y-6">
                 <div className="text-6xl mb-4">🐾</div>
                 <p className="text-lg text-gray-600">
-                  En Druma, tu mascota será el centro de todo. Vamos a crear tu primer compañero digital.
+                  En PetHub, tu mascota será el centro de todo. Vamos a crear tu primer compañero digital.
                 </p>
                 <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-4">
                   <p className="text-sm text-purple-800">
@@ -297,12 +493,30 @@ const PetCreation: React.FC = () => {
                     
                     <div className="space-y-2">
                       <Label htmlFor="breed">Raza</Label>
-                      <Input
-                        id="breed"
-                        value={formData.breed}
-                        onChange={(e) => setFormData(prev => ({ ...prev, breed: e.target.value }))}
-                        placeholder="Raza (opcional)"
-                      />
+                      {formData.species === 'Dog' ? (
+                        <Select 
+                          value={formData.breed} 
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, breed: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una raza" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {dogBreeds.map((breed) => (
+                              <SelectItem key={breed} value={breed}>
+                                {breed}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          id="breed"
+                          value={formData.breed}
+                          onChange={(e) => setFormData(prev => ({ ...prev, breed: e.target.value }))}
+                          placeholder="Raza (opcional)"
+                        />
+                      )}
                     </div>
                   </div>
                   
